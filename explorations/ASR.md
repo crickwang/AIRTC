@@ -17,6 +17,7 @@ Whisper is a general-purpose speech recognition model trained on 680,000 hours o
 #### 1. 英语语音识别（LibriSpeech + 跨域测试）
 
 | 模型/主体                     | LibriSpeech test-clean WER↓ | 跨域数据集平均 WER↓ | 相对人类差距 |
+|------------------------------|------------------------------|---------------------|--------------|
 | **人类转录（Alec）**          | ~5.8%（估计）               | ~10-15%             | 基准         |
 | 传统微调模型（LibriSpeech专训） | **1.4%**（SOTA）           | ~30%+               | 跨域明显变差 |
 | Whisper Large（Zero-shot）   | **2.5%**                   | **12.8%**（少55%错误） | 接近人类 |

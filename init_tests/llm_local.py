@@ -7,6 +7,7 @@ with open('llm_test.yaml', 'r', encoding='utf-8') as file:
 system = config.get('system')
 users = config.get('user')
 assistants = config.get('assistant')
+model = config.get('local_model', 'deepseek-r1:1.5b')
 
 messages = []
 if not system is None:
@@ -25,13 +26,11 @@ else:
         messages.append({'role': 'user', 'content': user})
 
 stream = chat(
-    model='deepseek-r1:1.5b',
+    model=model,
     messages=messages,
     stream=True,
 )
 
 for chunk in stream:
     content = chunk['message']['content']
-    # if '<' in content or '>' in content or len(content.strip()) == 0:
-    #     continue
     print(content, end='', flush=True)
