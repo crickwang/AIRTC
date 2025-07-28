@@ -1,15 +1,13 @@
-# transcribe the voice with no streaming
-
 import sounddevice as sd
 import numpy as np
 from scipy.io.wavfile import write
 from pywhispercpp.model import Model
 import yaml
 
-with open('config.yaml', 'r', encoding='utf-8') as file:
-    config = yaml.safe_load(file)
-asr_model = config.get('model', 'large-v3-turbo-q8_0')
-output_wav = config.get('output_wav', 'test.wav')
+# with open('config.yaml', 'r', encoding='utf-8') as file:
+#     config = yaml.safe_load(file)
+# asr_model = config.get('model', 'large-v3-turbo-q8_0')
+# output_wav = config.get('output_wav', 'test.wav')
 
 SAMPLE_RATE = 16000 
 CHUNK_DURATION = 0.5  # seconds
@@ -19,7 +17,7 @@ SILENCE_DURATION = 1  # seconds
 MAX_SILENT_CHUNKS = int(SILENCE_DURATION / CHUNK_DURATION)
 
 # calculate the RMS energy of audio
-model = Model(asr_model)
+#model = Model(asr_model)
 def rms_energy(data):
     return np.sqrt(np.mean(data**2))
 
@@ -35,7 +33,6 @@ with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype='float32') as stre
         energy = rms_energy(chunk)
         print(energy)
         recorded_audio.append(chunk)
-        print(len(recorded_audio))
 
         if energy < SILENCE_THRESHOLD:
             if start_recording:
@@ -49,9 +46,6 @@ with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype='float32') as stre
             break
 
 recorded_audio = np.concatenate(recorded_audio, axis=0)
-write(output_wav, SAMPLE_RATE, (recorded_audio * 32767).astype(np.int16))
-text = model.transcribe((recorded_audio * 32767).astype(np.int16), language='zh')
-print("Transcribed text:", text[0].text.strip())
-    
+write('temp.wav', SAMPLE_RATE, (recorded_audio * 32767).astype(np.int16))
 
 
