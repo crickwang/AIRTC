@@ -16,4 +16,8 @@ from pydub import AudioSegment
 from seamless_communication.inference import Translator
 from seamless_communication.streaming.dataloaders.s2tt import SileroVADSilenceRemover
 
-print(Translator._version)
+from transformers import AutoProcessor, SeamlessM4Tv2Model
+import torchaudio
+
+processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
+model = SeamlessM4Tv2Model.from_pretrained("facebook/seamless-m4t-v2-large")
