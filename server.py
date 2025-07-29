@@ -8,6 +8,9 @@ import uuid
 from aiohttp import web
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
+from funasr_asr.streaming import ParaformerStreaming
+
+a = ParaformerStreaming()
 
 ROOT = os.path.dirname(__file__)
 logger = logging.getLogger("pc")
