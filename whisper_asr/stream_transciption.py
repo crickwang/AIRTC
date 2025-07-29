@@ -72,7 +72,7 @@ def record_and_stream(pool, stop_signal):
         blocksize=CHUNK_SIZE,
     ):
         while not stop_signal.value:
-            if silent_chunks > 10000000 or time.time() - start_time > 100000000:
+            if silent_chunks > MAX_SILENT_CHUNKS or time.time() - start_time > MAX_RECORDING_DURATION:
                 print("====================Stop recording====================")
                 stop_signal.value = True
                 break
