@@ -4,17 +4,34 @@ import logging
 import os
 import ssl
 import uuid
+import yaml
+import argparse
+import numpy as np
+import av
 
 from aiohttp import web
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
-from funasr_asr.streaming import ParaformerStreaming
+from asr.funasr_stream import ParaformerStreaming
+from av.audio.resampler import AudioResampler
+from funasr import AutoModel   
 
-a = ParaformerStreaming()
+TIME_PER_CHUNK = 0.96  # 960ms per chunk, adjust as needed, It's better to be divisible by 16000 Hz
+ASR_SAMPLE_RATE = 16000  # Sample rate for ASR model
+NUM_SAMPLES_PER_CHUNK = int(ASR_SAMPLE_RATE * TIME_PER_CHUNK)
+
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+ASR_MODEL_PATH = config.get("asr_model_path", "model/paraformer-zh-streaming")
+ASR_CHUNK_SIZE = config.get("asr_chunk_size", [0, 10, 5])
+ASR_ENCODER_CHUNK_LOOK_BACK = config.get("asr_encoder_chunk_look_back", 4)
+ASR_DECODER_CHUNK_LOOK_BACK = config.get("asr_decoder_chunk_look_back", 1)
 
 ROOT = os.path.dirname(__file__)
 logger = logging.getLogger("pc")
 pcs = set()
+
+asr_model = AutoModel(model=ASR_MODEL_PATH, disable_update=True)
 
 class AudioPrinterTrack(MediaStreamTrack):
     kind = "audio"
@@ -54,7 +71,11 @@ async def offer(request):
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
         log_info("Connection state is %s", pc.connectionState)
-        if pc.connectionState == "failed":
+        if pc.connectionState in ['closed', 'failed', 'disconnected']:
+            if hasattr(pc, "_asr_stop_event"):
+                pc._asr_stop_event.set()
+            if hasattr(pc, "_asr_task"):
+                await pc._asr_task
             await pc.close()
             pcs.discard(pc)
 
@@ -63,12 +84,21 @@ async def offer(request):
         log_info("Track %s received", track.kind)
 
         if track.kind == "audio":
-            audio_track = AudioPrinterTrack(track)
-            recorder.addTrack(audio_track)
+            #print(type(track), track)
+            #audio_track = AudioPrinterTrack(track)
+            stop_event = asyncio.Event()
+            task = asyncio.create_task(asr_transcription(track, stop_event))
+            pc._asr_task = task
+            pc._asr_stop_event = stop_event
+            recorder.addTrack(track)
 
         @track.on("ended")
         async def on_ended():
             log_info("Track %s ended", track.kind)
+            if hasattr(pc, "_asr_stop_event"):
+                pc._asr_stop_event.set()
+            if hasattr(pc, "_asr_task"):
+                await pc._asr_task
             await recorder.stop()
             await pc.close()
             pcs.discard(pc)
@@ -88,10 +118,59 @@ async def on_shutdown(app):
     coros = [pc.close() for pc in pcs]
     await asyncio.gather(*coros)
     pcs.clear()
+    
+async def asr_transcription(track, stop_event=None) -> str:
+    '''
+    Perform ASR transcription on the audio track.
+    Args:
+        track (MediaStreamTrack): The audio track to transcribe.
+        stop_event (asyncio.Event): Event to signal when to stop transcription.
+    Returns:
+        str: Transcription result.
+    '''
+    text = ''
+    resampler = AudioResampler(rate=ASR_SAMPLE_RATE, layout='mono', format="s16")
+    frames = None
+    paraformer = ParaformerStreaming(
+                model=asr_model,
+                chunk_size=ASR_CHUNK_SIZE,
+                encoder_chunk_look_back=ASR_ENCODER_CHUNK_LOOK_BACK,
+                decoder_chunk_look_back=ASR_DECODER_CHUNK_LOOK_BACK
+                )
+    try:
+        while True:
+            if stop_event and stop_event.is_set():
+                break
+
+            if frames is not None and frames.shape[0] >= NUM_SAMPLES_PER_CHUNK:
+                print(f"Processing {frames.shape} samples for ASR transcription")
+                transcription = paraformer.generate(frames)
+                frames = None
+                print(f"Current chunk transcription: {transcription}")
+                if transcription and transcription != '':
+                    text += transcription
+                    
+            # Racing
+            recv_task = asyncio.create_task(track.recv())
+            stop_task = asyncio.create_task(stop_event.wait())
+            done, pending = await asyncio.wait([recv_task, stop_task], return_when=asyncio.FIRST_COMPLETED)
+
+            if recv_task in done:
+                frame = recv_task.result()
+                frame = resampler.resample(frame)[0].to_ndarray()
+                frame = np.squeeze(frame, axis=0)
+                frames = np.concatenate((frames, frame), axis=0) if frames is not None else frame
+            else:
+                recv_task.cancel()
+                break
+            for task in pending:
+                task.cancel()
+    except Exception as e:
+        logger.error(f"Error during ASR transcription: {e}")
+    print(f"Final transcription: {text}")
+    return text
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(description="Minimal WebRTC audio logger")
     parser.add_argument("--cert-file", help="SSL certificate file (for HTTPS)")
     parser.add_argument("--key-file", help="SSL key file (for HTTPS)")
