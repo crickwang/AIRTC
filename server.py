@@ -9,6 +9,7 @@ import argparse
 import numpy as np
 import av
 
+from dotenv import load_dotenv
 from aiohttp import web
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
@@ -16,16 +17,28 @@ from asr.funasr_stream import ParaformerStreaming
 from av.audio.resampler import AudioResampler
 from funasr import AutoModel   
 
+from llm.baidu import BaiduClient 
+
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
+    
+load_dotenv()
+
+API_KEY = os.environ.get("API_KEY")
+BASE_URL = os.environ.get("BASE_URL")
+
 TIME_PER_CHUNK = 0.96  # 960ms per chunk, adjust as needed, It's better to be divisible by 16000 Hz
 ASR_SAMPLE_RATE = 16000  # Sample rate for ASR model
 NUM_SAMPLES_PER_CHUNK = int(ASR_SAMPLE_RATE * TIME_PER_CHUNK)
 
-with open("config.yaml", "r") as f:
-    config = yaml.safe_load(f)
-ASR_MODEL_PATH = config.get("asr_model_path", "model/paraformer-zh-streaming")
-ASR_CHUNK_SIZE = config.get("asr_chunk_size", [0, 10, 5])
-ASR_ENCODER_CHUNK_LOOK_BACK = config.get("asr_encoder_chunk_look_back", 4)
-ASR_DECODER_CHUNK_LOOK_BACK = config.get("asr_decoder_chunk_look_back", 1)
+ASR_MODEL_PATH = config.get("asr_model_path")
+ASR_CHUNK_SIZE = config.get("asr_chunk_size")
+ASR_ENCODER_CHUNK_LOOK_BACK = 4
+ASR_DECODER_CHUNK_LOOK_BACK = 1
+
+SYSTEM_PROMPT = config.get("llm_system_prompt", '')
+LLM_MODEL = config.get("llm_model")
+MAX_TOKENS = 512
 
 ROOT = os.path.dirname(__file__)
 logger = logging.getLogger("pc")
