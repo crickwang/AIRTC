@@ -4,6 +4,7 @@ import logging
 import os
 import ssl
 import uuid
+from sklearn import base
 import yaml
 import argparse
 import numpy as np
@@ -16,10 +17,13 @@ from aiortc.contrib.media import MediaBlackhole
 from asr.funasr_stream import ParaformerStreaming
 from av.audio.resampler import AudioResampler
 from funasr import AutoModel   
+from dataclasses import dataclass
 
 from llm.baidu import BaiduClient 
 
-with open("config.yaml", "r") as f:
+from tts.edge_tts_stream import EdgeTTS
+
+with open("config.yaml", "r", encoding='utf-8') as f:
     config = yaml.safe_load(f)
     
 load_dotenv()
@@ -27,7 +31,7 @@ load_dotenv()
 API_KEY = os.environ.get("API_KEY")
 BASE_URL = os.environ.get("BASE_URL")
 
-TIME_PER_CHUNK = 0.96  # 960ms per chunk, adjust as needed, It's better to be divisible by 16000 Hz
+TIME_PER_CHUNK = 0.48  # 960ms per chunk, adjust as needed, It's better to be divisible by 16000 Hz
 ASR_SAMPLE_RATE = 16000  # Sample rate for ASR model
 NUM_SAMPLES_PER_CHUNK = int(ASR_SAMPLE_RATE * TIME_PER_CHUNK)
 
@@ -36,7 +40,7 @@ ASR_CHUNK_SIZE = config.get("asr_chunk_size")
 ASR_ENCODER_CHUNK_LOOK_BACK = 4
 ASR_DECODER_CHUNK_LOOK_BACK = 1
 
-SYSTEM_PROMPT = config.get("llm_system_prompt", '')
+SYSTEM_PROMPT = config.get("llm_system_prompt", None)
 LLM_MODEL = config.get("llm_model")
 MAX_TOKENS = 512
 
@@ -44,7 +48,18 @@ ROOT = os.path.dirname(__file__)
 logger = logging.getLogger("pc")
 pcs = set()
 
+asr_llm_queue = asyncio.Queue(maxsize=4)
+llm_tts_queue = asyncio.Queue(maxsize=4)
 asr_model = AutoModel(model=ASR_MODEL_PATH, disable_update=True)
+llm_client = BaiduClient(model=LLM_MODEL, api_key=API_KEY, base_url=BASE_URL)
+tts_model = EdgeTTS()
+
+# FunASR does not support punctuation, so it is hard to determine the end of a sentence.
+# is_final does nothing here.
+@dataclass
+class PromptText:
+    text: str
+    is_final: bool = False
 
 class AudioPrinterTrack(MediaStreamTrack):
     kind = "audio"
@@ -59,11 +74,11 @@ class AudioPrinterTrack(MediaStreamTrack):
         return frame
 
 async def index(request):
-    content = open(os.path.join(ROOT, "index.html"), "r").read()
+    content = open(os.path.join(ROOT, "templates/index.html"), "r").read()
     return web.Response(content_type="text/html", text=content)
 
 async def javascript(request):
-    content = open(os.path.join(ROOT, "js/client.js"), "r").read()
+    content = open(os.path.join(ROOT, "templates/js/client.js"), "r").read()
     return web.Response(content_type="application/javascript", text=content)
 
 async def offer(request):
@@ -85,10 +100,15 @@ async def offer(request):
     async def on_connectionstatechange():
         log_info("Connection state is %s", pc.connectionState)
         if pc.connectionState in ['closed', 'failed', 'disconnected']:
+            # Should llm task be cancelled here?
             if hasattr(pc, "_asr_stop_event"):
                 pc._asr_stop_event.set()
             if hasattr(pc, "_asr_task"):
                 await pc._asr_task
+            if hasattr(pc, "_llm_task"):
+                await pc._llm_task
+            if hasattr(pc, "_tts_task"):
+                await pc._tts_task
             await pc.close()
             pcs.discard(pc)
 
@@ -100,8 +120,9 @@ async def offer(request):
             #print(type(track), track)
             #audio_track = AudioPrinterTrack(track)
             stop_event = asyncio.Event()
-            task = asyncio.create_task(asr_transcription(track, stop_event))
-            pc._asr_task = task
+            pc._asr_task = asyncio.create_task(asr_transcription(track, asr_llm_queue, stop_event))
+            pc._llm_task = asyncio.create_task(llm_generator(asr_llm_queue, llm_tts_queue))
+            pc._tts_task = asyncio.create_task(tts_transcription(llm_tts_queue))
             pc._asr_stop_event = stop_event
             recorder.addTrack(track)
 
@@ -132,11 +153,12 @@ async def on_shutdown(app):
     await asyncio.gather(*coros)
     pcs.clear()
     
-async def asr_transcription(track, stop_event=None) -> str:
+async def asr_transcription(track, queue, stop_event=None) -> str:
     '''
     Perform ASR transcription on the audio track.
     Args:
         track (MediaStreamTrack): The audio track to transcribe.
+        queue (asyncio.Queue): Queue to put transcription results.
         stop_event (asyncio.Event): Event to signal when to stop transcription.
     Returns:
         str: Transcription result.
@@ -162,6 +184,7 @@ async def asr_transcription(track, stop_event=None) -> str:
                 print(f"Current chunk transcription: {transcription}")
                 if transcription and transcription != '':
                     text += transcription
+                    await queue.put(PromptText(text=text, is_final=False))
                     
             # Racing
             recv_task = asyncio.create_task(track.recv())
@@ -180,8 +203,47 @@ async def asr_transcription(track, stop_event=None) -> str:
                 task.cancel()
     except Exception as e:
         logger.error(f"Error during ASR transcription: {e}")
+    finally:
+        await queue.put(None)
     print(f"Final transcription: {text}")
     return text
+
+async def llm_generator(queue1, queue2) -> str:
+    '''
+    Generate a response from the LLM using the provided prompt.
+    Args:
+        queue (asyncio.Queue): Queue containing prompts for the LLM.
+    Returns:
+        str: The generated response from the LLM.
+    '''
+    # TODO: Record multiple conversations and send them to the LLM
+    try:
+        while True:
+            prompt = await queue1.get()
+            if prompt is None:
+                break
+            response = await asyncio.to_thread(llm_client.generate, 
+                                            users=[prompt.text], 
+                                            system=SYSTEM_PROMPT, 
+                                            max_tokens=MAX_TOKENS)
+            await queue2.put(response)
+            print(f"LLM response: {response}")
+    except Exception as e:
+        logger.error(f"Error during LLM generation: {e}")
+        
+async def tts_transcription(queue):
+    '''
+    Generate TTS audio from the input text.
+    Args:
+        text (str): Input text to be converted to speech.
+        queue (asyncio.Queue): Queue to put audio data.
+    '''
+    while True:
+        text = await queue.get()
+        if text is None:
+            break
+        print(f"Generating TTS for: {text}")
+        await tts_model.generate(text)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Minimal WebRTC audio logger")
@@ -204,8 +266,8 @@ if __name__ == "__main__":
 
     app = web.Application()
     app.on_shutdown.append(on_shutdown)
-    app.router.add_get("/", index)
-    app.router.add_get("/js/client.js", javascript)
+    app.router.add_get("/templates", index)
+    app.router.add_get("/templates/js/client.js", javascript)
     app.router.add_post("/offer", offer)
-    app.router.add_static("/", ".", show_index=True)
+    app.router.add_static("/templates", ".", show_index=True)
     web.run_app(app, access_log=None, host=args.host, port=args.port, ssl_context=ssl_context)

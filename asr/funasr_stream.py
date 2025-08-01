@@ -54,7 +54,7 @@ if __name__ == "__main__":
     model_path = "model/paraformer-zh-streaming"
     model = AutoModel(model=os.path.join(parent_dir, model_path), disable_update=True)
     paraformer = ParaformerStreaming(model=model)
-    wav_file = os.path.join(parent_dir, "audio/mandarin.wav")
+    wav_file = os.path.join(parent_dir, "audio/long_mandarin.wav")
     speech, sample_rate = soundfile.read(wav_file)
     start_time = time.time()
     transcription = paraformer.generate(speech)

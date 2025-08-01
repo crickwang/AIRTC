@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <title>WebRTC</title>
-  <link href="./css/bootstrap.min.css" rel="stylesheet">
-  <link href="./css/client.css" rel="stylesheet">
+  <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/client.css" rel="stylesheet">
 </head>
 <body class="p-3">
   <div class="container">
@@ -12,8 +12,12 @@
     <div class="mb-3">
       <p><strong>Local Input (Blue):</strong></p>
       <canvas id="localVisualizer" class="visualizer"></canvas>
+      <p class="mt-2">Press the buttons below to start and stop audio processing (TODO).</p>
       <button id="startButton" class="btn btn-primary" onclick="start()">Start</button>
       <button id="stopButton" class="btn btn-secondary" onclick="stop()">Stop</button>
+      <p class="mt-2">Press the buttons below to call the openAI realtime API.</p>
+      <button id="startButtonOpenAI" class="btn btn-primary" onclick="start_session()">Start</button>
+      <button id="stopButtonOpenAI" class="btn btn-secondary" onclick="stop_session()">Stop</button>
     </div>
     <div class="mb-3">
       <p><strong>Remote Audio Visualization (Red):</strong></p>
@@ -21,8 +25,9 @@
     </div>
   </div>
 
-  <script src="./js/bootstrap.bundle.min.js"></script>
-  <script src="./js/client.js"></script>
+  <script src="/static/js/bootstrap.bundle.min.js"></script>
+  <!--<script src="/static/js/client.js"></script>-->
+  <script src="/static/js/openai_client.js"></script>
 
 </body>
 </html>
