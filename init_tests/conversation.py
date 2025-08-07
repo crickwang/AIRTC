@@ -3,15 +3,9 @@ import asyncio
 import edge_tts.submaker as submaker
 import edge_tts.communicate as communicate
 import yaml
-import pywhispercpp.constants
 from pywhispercpp.model import Model
-import pywhispercpp
 from pydub import AudioSegment
 import os
-from pathlib import Path
-import sounddevice as sd
-import numpy as np
-from scipy.io.wavfile import write
 import time
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -23,6 +17,7 @@ SILENCE_THRESHOLD = 0.01 # 0.05 for normal volume
 SILENCE_DURATION = 2  # seconds
 MAX_SILENT_CHUNKS = int(SILENCE_DURATION / CHUNK_DURATION)
 CHUNKS_PER_TRANSCRIBE = int(2 / CHUNK_DURATION) # Transcribe every 2 seconds
+MAX_TOKEN = 1024
 
 with open('config.yaml', 'r', encoding='utf-8') as file:
     config = yaml.safe_load(file)
@@ -33,8 +28,18 @@ m4a_file = config.get('mandarin_m4a', 'audio/mandarin.m4a')
 voice = config.get('tts_voice', 'en-GB-SoniaNeural')
 output_file = config.get('tts_output', 'audio/tts_output.mp3')
 srt_file = config.get('tts_subtitle', 'audio/tts_output.srt')
+llm_online_model = config.get('llm_online_model', 'ernie-4.5-0.3b')
+system_prompt = config.get('system_prompt')
 
-def asr_recording(m4a_file, asr_model):
+def asr_recording(m4a_file: str, asr_model: str) -> str:
+    """
+    Transcribe audio from a file using Whisper ASR model.
+    Args:
+        m4a_file (str): Path to the input audio file in m4a format.
+        asr_model (str): The name of the ASR model to use for transcription.
+    Returns:
+        str: The transcribed text.
+    """
     wav_file = 'audio/temp.wav'
     audio = AudioSegment.from_file(m4a_file)
     audio = audio.set_frame_rate(16000).set_channels(1)
@@ -48,64 +53,20 @@ def asr_recording(m4a_file, asr_model):
     print(f'asr outputs: {texts}')
     return texts
 
-# def asr_live(asr_model):
-#     silent_chunks = 0
-#     valid_chunks = 1
-#     start_recording = False
-#     texts = ''
-#     buffer_chunks = []
-#     model = Model(asr_model)
-
-#     def rms_energy(data):
-#         return np.sqrt(np.mean(data**2))
-
-#     def audio_callback(indata, frames, time, status):
-#         nonlocal silent_chunks, valid_chunks, start_recording, texts, buffer_chunks
-#         audio_chunk = indata[:, 0]
-#         energy = rms_energy(audio_chunk)
-#         print(energy)
-#         if energy < SILENCE_THRESHOLD:
-#             if start_recording:
-#                 silent_chunks += 1
-#         else:
-#             start_recording = True
-#             silent_chunks = 0
-            
-#         if start_recording:
-#             buffer_chunks.append(audio_chunk)
-#             if len(buffer_chunks) >= CHUNKS_PER_TRANSCRIBE * valid_chunks:
-#                 curr_chunks = np.concatenate(buffer_chunks[-CHUNKS_PER_TRANSCRIBE:])
-#                 print(len(curr_chunks), curr_chunks.shape)
-#                 print(silent_chunks, valid_chunks)
-#                 # write(f"test_audio/recording_test_{valid_chunks}.wav", SAMPLE_RATE, (curr_chunks * 32767).astype(np.int16))
-#                 transcribed_text = model.transcribe((curr_chunks * 32767).astype(np.int16), language='zh')
-#                 print(len(transcribed_text), transcribed_text)
-#                 for chunk in transcribed_text:
-#                     print("实时识别:", chunk.text.strip())
-#                     texts += chunk.text.strip() + ' '
-#                 valid_chunks += 1
-
-#         if silent_chunks > MAX_SILENT_CHUNKS:
-#             print("====================Stop recording====================")
-#             raise sd.CallbackStop()
-
-#     print("====================Start recording====================")
-#     with sd.InputStream(
-#         samplerate=SAMPLE_RATE,
-#         channels=1,
-#         dtype='float32',
-#         callback=audio_callback,
-#         blocksize=CHUNK_SIZE,
-#     ):
-#         sd.sleep(int(10 * 1000))  # Max 10 seconds, or until silence
-#     print(texts)
-#     return texts
-
-def llm_local(texts, llm_model):
+def llm_local(texts: str, llm_model: str) -> str:
+    """
+    Transcribe text using a local LLM model.
+    Args:
+        texts (str): The input text to transcribe.
+        llm_model (str): The name of the LLM model to use for transcription.
+    Returns:
+        str: The transcribed text.
+    """
     messages = [
-        {'role': 'system', 'content': '使用中文回答问题。不要生成任何图像符号,如emoji等不属于文字的内容。'},
-        {'role': 'user', 'content': texts}]
-    
+        {'role': 'system', 'content': system_prompt},
+        {'role': 'user', 'content': texts}
+    ]
+
     stream = chat(
         model=llm_model,
         messages=messages,
@@ -119,23 +80,35 @@ def llm_local(texts, llm_model):
     print(f'llm outputs: {contents}')
     return contents
 
-def llm_online(texts):
+def llm_online(texts: str, max_token: int = MAX_TOKEN) -> str:
+    """
+    Transcribe text using an online LLM model.
+    Please refer to [https://ai.baidu.com/ai-doc/AISTUDIO] for more details.
+    Use [https://aistudio.baidu.com/account/accessToken] to get the access token.
+    please configure the .env file with your API key and base URL.
+    Args:
+        texts (str): The input text to transcribe.
+        max_token (int, optional): The maximum number of tokens for the LLM response.
+            Defaults to MAX_TOKEN.
+    Returns:
+        str: The transcribed text.
+    """
     load_dotenv()
     client = OpenAI(
-        api_key=os.environ.get("API_KEY"),
-        base_url=os.environ.get("BASE_URL"),
+        api_key=os.environ.get("BAIDU_AISTUDIO_API_KEY"),
+        base_url=os.environ.get("BAIDU_AISTUDIO_BASE_URL"),
     )
 
     messages = [
-        {'role': 'system', 'content': '你是一只可爱的猫娘，回答每句话的时候最后都会加一句喵'},
+        {'role': 'system', 'content': system_prompt},
         {'role': 'user', 'content': texts}
     ]
 
     chat_completion = client.chat.completions.create(
         messages=messages,
-        model=os.environ.get("MODEL"),
+        model=llm_online_model,
         stream=True,
-        max_completion_tokens=1024,
+        max_completion_tokens=max_token,
     )
 
     contents = ''
@@ -145,9 +118,15 @@ def llm_online(texts):
     print(f'llm outputs: {contents}')
     return contents
 
-async def tts(contents) -> None:
-    com = communicate.Communicate(
-        text=contents, voice=voice)
+async def tts(contents: str) -> None:
+    """
+    Convert text to speech using Edge TTS and save the output to a file.
+    Args:
+        contents (str): The text to convert to speech.
+    Returns:
+        None
+    """
+    com = communicate.Communicate(text=contents, voice=voice)
     sub = submaker.SubMaker()
     with open(output_file, "wb") as file:
         async for chunk in com.stream():

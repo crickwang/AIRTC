@@ -4,7 +4,8 @@ import soundfile
 import time
 
 class ParaformerStreaming:
-    def __init__(self, model, chunk_size=[0, 10, 5], encoder_chunk_look_back=4, 
+    '''Streaming speech recognition using the Paraformer model.'''
+    def __init__(self, model, chunk_size=[0, 5, 5], encoder_chunk_look_back=4, 
                  decoder_chunk_look_back=1):
         '''
         Initialize the ParaformerStreaming model.
@@ -59,7 +60,7 @@ if __name__ == "__main__":
     start_time = time.time()
     transcription = paraformer.generate(speech)
     end_time = time.time()
-    print(f"Transcription: {transcription}")
+    print(f"Transcription: {transcription} time {end_time - start_time:.2f} seconds")
 
 # Given a conventional sample rate of 16000Hz and 60ms each frame (idk why, seems that paraformer just set it that way), 
 # The first element in this list is unknown, you may go to github issue at [https://github.com/modelscope/FunASR/issues/1026]

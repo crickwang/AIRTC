@@ -18,7 +18,13 @@ language = config.get('kokoro_language', 'z')
 reexp = r'(?<=[.!?。])\s*'
     
 def main() -> float:
-    # kokoro reference: https://github.com/hexgrad/kokoro
+    """
+    Main function to run the TTS pipeline using Kokoro.
+    It initializes the pipeline, processes the text, and plays the audio.
+    kokoro reference: [https://github.com/hexgrad/kokoro]
+    Returns:
+        float: The total time taken for the TTS process.
+    """
     audio_queue = queue.Queue()
     start = time.time()
     print('===================开始计时=====================')
@@ -48,6 +54,14 @@ def main() -> float:
 
 # 第二个进程
 def second_worker(audio_queue):
+    """    
+    Function to play audio from the audio queue.
+    It continuously retrieves audio data from the queue and plays it using sounddevice.
+    Args:
+        audio_queue (queue.Queue): The queue containing audio data to be played.
+    Returns:
+        None
+    """
     while True:
         audio = audio_queue.get()
         if audio is None:

@@ -13,8 +13,11 @@
       <p><strong>Local Input (Blue):</strong></p>
       <canvas id="localVisualizer" class="visualizer"></canvas>
       <p class="mt-2">Press the buttons below to start and stop audio processing (TODO).</p>
+      <audio id="remoteAudio" controls></audio>
       <button id="startButton" class="btn btn-primary" onclick="start()">Start</button>
       <button id="stopButton" class="btn btn-secondary" onclick="stop()">Stop</button>
+      <button id="pauseButton" class="btn btn-warning" onclick="pause()">Pause</button>
+      <button id="resumeButton" class="btn btn-success" onclick="resume()">Resume</button>
       <p class="mt-2">Press the buttons below to call the openAI realtime API.</p>
       <button id="startButtonOpenAI" class="btn btn-primary" onclick="start_session()">Start</button>
       <button id="stopButtonOpenAI" class="btn btn-secondary" onclick="stop_session()">Stop</button>
@@ -26,8 +29,8 @@
   </div>
 
   <script src="/static/js/bootstrap.bundle.min.js"></script>
-  <!--<script src="/static/js/client.js"></script>-->
-  <script src="/static/js/openai_client.js"></script>
+  <script src="/static/js/client.js"></script>
+  <!--<script src="/static/js/openai_client.js"></script>-->
 
 </body>
 </html>

@@ -1,6 +1,3 @@
-document.getElementById("startButtonOpenAI").addEventListener("click", start_session);
-document.getElementById("stopButtonOpenAI").addEventListener("click", stop_session);
-
 let pc = null;
 let ms = null;
 let dc = null;
@@ -39,14 +36,16 @@ async function start_session() {
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  const baseUrl = "https://api.openai.com/v1/realtime";
-  const model = "gpt-4o-mini-realtime-preview-2024-12-17";
+  const baseUrl = "https://api.openai.com/v1/audio/transcriptions";
+  const model = "gpt-4o-mini-transcribe";
   const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
     method: "POST",
     body: offer.sdp,
     headers: {
       Authorization: `Bearer ${EPHEMERAL_KEY}`,
-      "Content-Type": "application/sdp"
+    },
+    files: {
+      audio: ms.getTracks()[0].mediaStreamTrack,
     },
   });
 

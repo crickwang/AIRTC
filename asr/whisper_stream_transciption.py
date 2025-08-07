@@ -23,6 +23,12 @@ BUFFER_DURATION = 2  # seconds
 CHUNKS_PER_BUFFER = int(BUFFER_DURATION / CHUNK_DURATION)
 
 def initializer(asr_model):
+    """
+    Initialize the model for multiprocessing.
+    This function is called once per worker process.
+    Args:
+        asr_model (str): The name of the ASR model to load.
+    """
     global model
     model = Model(asr_model)
 
@@ -30,6 +36,14 @@ def rms_energy(data):
     return np.sqrt(np.mean(data**2))
 
 def transcribe_worker(audio_data, language='zh'):
+    """
+    Transcribe audio data to text.
+    Args:
+        audio_data (np.ndarray): The audio data to transcribe.
+        language (str, optional): The language of the audio. Defaults to 'zh'.
+    Returns:
+        str: The transcribed text.
+    """
     print("Transcribing audio...")
     global model
     result = model.transcribe((audio_data * 32767).astype(np.int16), language=language)
@@ -38,16 +52,37 @@ def transcribe_worker(audio_data, language='zh'):
     return text
 
 def record_and_stream(pool, stop_signal):
+    """
+    Record audio and stream it for transcription.
+    Args:
+        pool (Pool): The multiprocessing pool to use for transcription.
+        stop_signal (Value): A shared value to signal when to stop recording.
+    Returns:
+        None
+    """
     buffer_chunks = []
     start_signal = False
     silent_chunks = 0
     start_time = time.time()
     
     def handle_callback(result):  
+        """
+        Handle the transcription result from the worker.
+        Args:
+            result (str): The transcription result from the worker.
+        """
         print(f'Result from transcription: {result}')
         text_queue.put(result)
     
     def audio_callback(indata, frames, time, status):
+        """
+        Callback function to process audio input.
+        Args:
+            indata (np.ndarray): The audio input data.
+            frames (int): The number of frames in the audio input.
+            time (object): The time object containing timestamp information.
+            status (object): The status object containing error information.
+        """
         nonlocal buffer_chunks, silent_chunks, start_signal, start_time
         audio_chunk = indata[:, 0]
         energy = rms_energy(audio_chunk)

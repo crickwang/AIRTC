@@ -26,16 +26,4 @@ model = Model(model=model_name)
 chunks = model.transcribe(wav_file, language='zh')
 for chunk in chunks:
     print(chunk.text.strip())
-    
-# print(pywhispercpp.constants.AVAILABLE_MODELS)
-    
-# start = time.time()
-# chunks1 = model.transcribe(wav_file, language='zh')
-# end = time.time()
-# print(f"Time taken for second transcription: {end - start} seconds")
-# start = end
-# chunks2 = model.transcribe(wav_file, language='zh')
-# end = time.time()
-# print(f"Time taken for third transcription: {end - start} seconds")
-# start = end
 

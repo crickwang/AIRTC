@@ -1,53 +1,40 @@
 
 import queue
-import re
 import sys
 import time
-
-from google.cloud import speech
-import pyaudio
+from google.cloud import speech_v1 as speech
 
 # Audio recording parameters
-STREAMING_LIMIT = 240000  # 4 minutes
+STREAMING_LIMIT = 60000  # 1 minute, in ms
 SAMPLE_RATE = 16000
 CHUNK_SIZE = int(SAMPLE_RATE / 10)  # 100ms
 
+# ANSI escape sequences for colored output
+# These are used to color the output in the terminal.
 RED = "\033[0;31m"
 GREEN = "\033[0;32m"
 YELLOW = "\033[0;33m"
-
+WHITE = "\033[0;37m"
 
 def get_current_time() -> int:
-    """Return Current Time in MS.
-
-    Returns:
-        int: Current Time in MS.
-    """
-
+    """Get the current time in milliseconds."""
     return int(round(time.time() * 1000))
 
+class AudioStream:
+    """A class to manage audio stream data."""
 
-class ResumableMicrophoneStream:
-    """Opens a recording stream as a generator yielding the audio chunks."""
-
-    def __init__(
-        self: object,
-        rate: int,
-        chunk_size: int,
-    ) -> None:
-        """Creates a resumable microphone stream.
-
-        Args:
-        self: The class instance.
-        rate: The audio file's sampling rate.
-        chunk_size: The audio file's chunk size.
-
-        returns: None
+    def __init__(self: object, audio_queue: queue.Queue, rate: int, chunk_size: int, language_code: str = "en-US"):
         """
-        self._rate = rate
+        Args:
+            self: The class instance.
+            audio_queue: Queue to hold audio data.
+            track: The audio track to process.
+            rate: The audio file's sampling rate.
+            chunk_size: The audio file's chunk size.
+        """
+        self.rate = rate
         self.chunk_size = chunk_size
-        self._num_channels = 1
-        self._buff = queue.Queue()
+        self.audio_queue = audio_queue
         self.closed = True
         self.start_time = get_current_time()
         self.restart_counter = 0
@@ -59,19 +46,7 @@ class ResumableMicrophoneStream:
         self.bridging_offset = 0
         self.last_transcript_was_final = False
         self.new_stream = True
-        self._audio_interface = pyaudio.PyAudio()
-        self._audio_stream = self._audio_interface.open(
-            format=pyaudio.paInt16,
-            channels=self._num_channels,
-            rate=self._rate,
-            input=True,
-            frames_per_buffer=self.chunk_size,
-            # Run the audio stream asynchronously to fill the buffer object.
-            # This is necessary so that the input device's buffer doesn't
-            # overflow while the calling thread makes network requests, etc.
-            stream_callback=self._fill_buffer,
-        )
-
+        
     def __enter__(self: object) -> object:
         """Opens the stream.
 
@@ -99,41 +74,17 @@ class ResumableMicrophoneStream:
 
         returns: None
         """
-        self._audio_stream.stop_stream()
-        self._audio_stream.close()
         self.closed = True
-        # Signal the generator to terminate so that the client's
-        # streaming_recognize method will not block the process termination.
-        self._buff.put(None)
-        self._audio_interface.terminate()
-
-    def _fill_buffer(
-        self: object,
-        in_data: object,
-        *args: object,
-        **kwargs: object,
-    ) -> object:
-        """Continuously collect data from the audio stream, into the buffer.
-
-        Args:
-        self: The class instance.
-        in_data: The audio data as a bytes object.
-        args: Additional arguments.
-        kwargs: Additional arguments.
-
-        returns: None
+        self.audio_queue.put(None)
+        
+    def generate(self: object):
         """
-        self._buff.put(in_data)
-        return None, pyaudio.paContinue
-
-    def generator(self: object) -> object:
-        """Stream Audio from microphone to API and to local buffer
-
+        Generator to yield audio data from the track.
+        This method continuously yields audio data chunks from the audio queue.
         Args:
             self: The class instance.
-
-        returns:
-            The data from the audio stream.
+        Yields:
+            bytes: The audio data chunk.
         """
         while not self.closed:
             data = []
@@ -165,7 +116,7 @@ class ResumableMicrophoneStream:
             # Use a blocking get() to ensure there's at least one chunk of
             # data, and stop iteration if the chunk is None, indicating the
             # end of the audio stream.
-            chunk = self._buff.get()
+            chunk = self.audio_queue.get()
             self.audio_input.append(chunk)
 
             if chunk is None:
@@ -174,7 +125,7 @@ class ResumableMicrophoneStream:
             # Now consume whatever other data's still buffered.
             while True:
                 try:
-                    chunk = self._buff.get(block=False)
+                    chunk = self.audio_queue.get(block=False)
 
                     if chunk is None:
                         return
@@ -185,7 +136,6 @@ class ResumableMicrophoneStream:
                     break
 
             yield b"".join(data)
-
 
 def listen_print_loop(responses: object, stream: object) -> None:
     """Iterates through server responses and prints them.
@@ -206,6 +156,7 @@ def listen_print_loop(responses: object, stream: object) -> None:
         responses: The responses returned from the API.
         stream: The audio stream to be processed.
     """
+    transcript = ""
     for response in responses:
         if get_current_time() - stream.start_time > STREAMING_LIMIT:
             stream.start_time = get_current_time()
@@ -247,20 +198,16 @@ def listen_print_loop(responses: object, stream: object) -> None:
 
             stream.is_final_end_time = stream.result_end_time
             stream.last_transcript_was_final = True
-
-            # Exit recognition if any of the transcribed phrases could be
-            # one of our keywords.
-            if re.search(r"\b(exit|quit)\b", transcript, re.I):
-                sys.stdout.write(YELLOW)
-                sys.stdout.write("Exiting...\n")
-                stream.closed = True
-                break
+            
+            sys.stdout.write(WHITE)
+            sys.stdout.write("\033[K")
         else:
             sys.stdout.write(RED)
             sys.stdout.write("\033[K")
             sys.stdout.write(str(corrected_time) + ": " + transcript + "\r")
 
             stream.last_transcript_was_final = False
+    return transcript
 
 
 def main() -> None:
@@ -277,7 +224,7 @@ def main() -> None:
         config=config, interim_results=True
     )
 
-    mic_manager = ResumableMicrophoneStream(SAMPLE_RATE, CHUNK_SIZE)
+    mic_manager = AudioStream(SAMPLE_RATE, CHUNK_SIZE)
     print(mic_manager.chunk_size)
     sys.stdout.write(YELLOW)
     sys.stdout.write('\nListening, say "Quit" or "Exit" to stop.\n\n')
