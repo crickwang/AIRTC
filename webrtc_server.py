@@ -17,10 +17,11 @@ from pydub import AudioSegment
 import io
 from fractions import Fraction
 import sounddevice as sd
+import pyaudio as pa
 
 from dotenv import load_dotenv
 from aiohttp import web
-from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
+from aiortc import AudioStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
 from av.audio.resampler import AudioResampler
 from aiortc.mediastreams import MediaStreamError
@@ -56,13 +57,14 @@ load_dotenv()
 
 # Environment Variables and Constants
 TIME_PER_CHUNK = 0.96  # in ms
-SAMPLE_RATE = 16000  # in Hz
+ASR_SAMPLE_RATE = 24000  # in Hz
 LANGUAGE_CODE = "zh-CN"  # Language code, please refer to
                          # [https://developers.google.com/workspace/admin/directory/v1/languages]
-NUM_SAMPLES_PER_CHUNK = int(SAMPLE_RATE * TIME_PER_CHUNK)
+NUM_SAMPLES_PER_CHUNK = int(ASR_SAMPLE_RATE * TIME_PER_CHUNK)
 CHANNELS = 1
 FORMAT = "s16"
-SAMPLES_PER_FRAME = SAMPLE_RATE // 10
+AUDIO_SAMPLE_RATE = 24000
+SAMPLES_PER_FRAME = AUDIO_SAMPLE_RATE // 10
 LAYOUT = "mono"  # Audio layout, mono or stereo
 # ASR_MODEL_PATH = config.get("asr_model_path")
 # ASR_CHUNK_SIZE = config.get("asr_chunk_size")
@@ -70,7 +72,7 @@ LAYOUT = "mono"  # Audio layout, mono or stereo
 # ASR_DECODER_CHUNK_LOOK_BACK = 1
 # STREAMING_LIMIT = 60000  # 1 minute, in ms
 # ENERGY_THRESHOLD = 0.01  # Energy threshold for voice activity detection
-CHUNK_SIZE = int(SAMPLE_RATE / 10)
+CHUNK_SIZE = int(ASR_SAMPLE_RATE / 10)
 
 SYSTEM_PROMPT = config.get("llm_system_prompt", None)
 LLM_API_KEY = os.environ.get("BAIDU_AISTUDIO_API_KEY")
@@ -113,7 +115,7 @@ tts_output_queue = asyncio.Queue()
 google_client = speech.SpeechClient()
 google_config = speech.RecognitionConfig(
     encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-    sample_rate_hertz=SAMPLE_RATE,
+    sample_rate_hertz=ASR_SAMPLE_RATE,
     language_code=LANGUAGE_CODE,
     max_alternatives=1,
 )
@@ -121,21 +123,24 @@ streaming_config = speech.StreamingRecognitionConfig(
     config=google_config, interim_results=True, single_utterance=True
 )
 
-resampler = AudioResampler(rate=SAMPLE_RATE, layout=LAYOUT, format=FORMAT)
+resampler = AudioResampler(rate=AUDIO_SAMPLE_RATE, layout=LAYOUT, format=FORMAT)
 llm_client = BaiduClient(model=LLM_MODEL, api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
 tts_model = EdgeTTS()
 
 start_time = time.time()
 
-class AudioPrinterTrack(MediaStreamTrack):
+p = pa.PyAudio()
+stream = p.open(format=pa.paInt16, channels=1, rate=AUDIO_SAMPLE_RATE, output=True)
+
+class AudioPrinterTrack(AudioStreamTrack):
     """ A track that prints audio data received from the remote peer. """
     kind = "audio"
-    def __init__(self: object, track: MediaStreamTrack) -> None:
+    def __init__(self: object, track: AudioStreamTrack) -> None:
         """ 
         Initialize the AudioPrinterTrack with the given track. 
         Args:
             self: The class instance.
-            track (MediaStreamTrack): The audio track to print data from.
+            track (AudioStreamTrack): The audio track to print data from.
         Returns: 
             None
         """
@@ -156,10 +161,10 @@ class AudioPrinterTrack(MediaStreamTrack):
               f"with sample rate {frame.sample_rate}")
         return frame
 
-class AudioPlayer(MediaStreamTrack):
+class AudioPlayer(AudioStreamTrack):
     """ A track that plays audio data from a queue. """
     kind = "audio"
-    def __init__(self: object, audio_queue: asyncio.Queue, sample_rate: int = SAMPLE_RATE) -> None:
+    def __init__(self: object, audio_queue: asyncio.Queue, sample_rate: int = AUDIO_SAMPLE_RATE) -> None:
         """
         Initialize the AudioPlayer with an audio queue and sample rate.
         Args:
@@ -173,7 +178,9 @@ class AudioPlayer(MediaStreamTrack):
         self.audio_queue = audio_queue
         self.sample_rate = sample_rate
         self._timestamp = 0
-        self.samples_per_frame = SAMPLES_PER_FRAME
+        self.samples_per_frame = sample_rate // 10
+        self._audio_buffer = []  # Buffer to store audio data
+        self._is_playing = False  # Track if we're actively playing audio
         
     async def recv(self: object) -> AudioFrame:
         """
@@ -182,52 +189,52 @@ class AudioPlayer(MediaStreamTrack):
             self: The class instance.
         Returns:
             frame (AudioFrame): The audio frame to be played.
-        Raises:
-            MediaStreamError: If there is no more audio data.
-            asyncio.QueueEmpty: If the audio queue is empty.
         """
-        try:
-            # Do NOT wait for the queue to be empty, just get the next item
-            audio = self.audio_queue.get_nowait()
-            if audio is None:
-                raise MediaStreamError("No more audio data")
-            audio_array = audio.reshape(1, -1)
-            frame = AudioFrame.from_ndarray(audio_array, format=FORMAT, layout='mono')
-            
-            #pcm = frame_data[0].to_ndarray().flatten()
-            #self.audio_buffer.extend(pcm.tolist())
-            #pcm = np.frombuffer(frame_data, dtype=np.int16)
-            
-            frame.sample_rate = self.sample_rate
-            frame.time_base = Fraction(1, self.sample_rate)
-            frame.pts = self._timestamp
-            self._timestamp += self.samples_per_frame
-            print(type(frame), frame.sample_rate, frame.time_base, frame.pts, frame)
-            return frame
-        except asyncio.QueueEmpty:
-            return self._create_silence_frame()
-        except MediaStreamError as e:
-            print(e)
-            logger.error(e)
-            return self._create_silence_frame()
-
-    def _create_silence_frame(self: object) -> AudioFrame:
-        """
-        Create a frame of silence to return when the queue is empty.
-        Args:
-            self: The class instance.
-        Returns:
-            frame (AudioFrame): A frame of silence.
-        """
-        silence = np.zeros((1, self.samples_per_frame), dtype=np.int16)
-        frame = AudioFrame.from_ndarray(silence, format=FORMAT, layout='mono')
+        # Try to fill buffer with available audio data
+        while True:
+            try:
+                audio_data = self.audio_queue.get_nowait()
+                
+                if audio_data is None:
+                    # End of audio stream marker
+                    self._is_playing = False
+                    break
+                else:
+                    print('after popping out of the queue', audio_data)
+                    #stream.write(audio_data.tobytes())
+                    # Convert to list and add to buffer
+                    if isinstance(audio_data, np.ndarray):
+                        self._audio_buffer.extend(audio_data.tolist())
+                    else:
+                        self._audio_buffer.extend(audio_data)
+                    self._is_playing = True
+            except asyncio.QueueEmpty:
+                break
+        
+        # Create frame from buffer or silence
+        if len(self._audio_buffer) >= self.samples_per_frame:
+            # We have enough audio data
+            frame_data = self._audio_buffer[:self.samples_per_frame]
+            self._audio_buffer = self._audio_buffer[self.samples_per_frame:]
+            audio_array = np.array(frame_data, dtype=np.int16).reshape(1, -1)
+        else:
+            # Not enough data, create silence but keep consistent timing
+            audio_array = np.zeros((1, self.samples_per_frame), dtype=np.int16)
+        audio_array = np.array(self._audio_buffer, dtype=np.int16).reshape(1, -1)
+        # Create AudioFrame
+        stream.write(audio_array.tobytes())
+        frame = AudioFrame.from_ndarray(audio_array, format=FORMAT, layout='mono')
         frame.sample_rate = self.sample_rate
         frame.time_base = Fraction(1, self.sample_rate)
-        frame.pts = 0
-        #self._timestamp += self.samples_per_frame
+        frame.pts = self._timestamp
+        
+        # CRITICAL: Always advance timestamp for consistent timing
+        self._timestamp += self.samples_per_frame
+        
+        #print(f"AudioPlayer frame: pts={frame.pts}, timestamp={self._timestamp}, buffer_size={len(self._audio_buffer)}, playing={self._is_playing}")
         return frame
 
-class TestToneGenerator(MediaStreamTrack):
+class TestToneGenerator(AudioStreamTrack):
     """
     Generate a test tone for testing without input audio
     """
@@ -285,7 +292,7 @@ class TestToneGenerator(MediaStreamTrack):
             return frame
         except asyncio.QueueEmpty:
             # If queue is empty, return a silence frame
-            return self._create_silence_frame(self.samples_per_frame)
+            return self._create_silence_frame()
     
     def _create_silence_frame(self: object) -> AudioFrame:
         """
@@ -374,7 +381,7 @@ async def offer(request: web.Request) -> web.Response:
         """
         Handle incoming media tracks.
         Args:
-            track (MediaStreamTrack): The incoming media track.
+            track (AudioStreamTrack): The incoming media track.
         """
         log_info("Track %s received", track.kind)
         if track.kind == "audio":
@@ -426,13 +433,13 @@ async def on_shutdown(app: web.Application) -> None:
     await asyncio.gather(*coros)
     pcs.clear()
 
-async def asr_transcription(track: MediaStreamTrack, stop_event: asyncio.Event = None) -> str:
+async def asr_transcription(track: AudioStreamTrack, stop_event: asyncio.Event = None) -> str:
     '''
     Perform FunASR transcription on the audio track.
     FunASR is an open source streaming ASR model.
     Abandoned due to its poor performance.
     Args:
-        track (MediaStreamTrack): The audio track to transcribe.
+        track (AudioStreamTrack): The audio track to transcribe.
         stop_event (asyncio.Event, optional): Event to signal when to stop transcription.
             Defaults to None.
     Returns:
@@ -480,11 +487,11 @@ async def asr_transcription(track: MediaStreamTrack, stop_event: asyncio.Event =
     print(f"Final transcription: {text}")
     return text
 
-async def google_asr(track: MediaStreamTrack, stop_event: asyncio.Event = None) -> str:
+async def google_asr(track: AudioStreamTrack, stop_event: asyncio.Event = None) -> str:
     """
     Perform ASR transcription on the audio track.
     Args:
-        track (MediaStreamTrack): The audio track to transcribe.
+        track (AudioStreamTrack): The audio track to transcribe.
         stop_event (asyncio.Event): Event to signal when to stop transcription.
     Returns:
         str: Transcription result.
@@ -498,7 +505,7 @@ async def google_asr(track: MediaStreamTrack, stop_event: asyncio.Event = None) 
     output_queue = queue.Queue()
     audio_stream = AudioStream(
         audio_queue, 
-        rate=SAMPLE_RATE, 
+        rate=ASR_SAMPLE_RATE, 
         chunk_size=CHUNK_SIZE, 
         language_code=LANGUAGE_CODE,
     )
@@ -594,15 +601,19 @@ async def tts_transcription(input_queue: asyncio.Queue, output_queue: asyncio.Qu
             audio_np = np.frombuffer(audio.raw_data, dtype=np.int16)
             # print(np.sum(audio_np[audio_np > 0]))
             # print(np.sum(audio_np[audio_np < 0]))
-            
+            print(audio.frame_rate)
+            #sd.play(audio_np, samplerate=audio.frame_rate)  # Play audio
             # split audio samples into frames of SAMPLES_PER_FRAME
+            #p = pa.PyAudio()
+            #stream = p.open(format=pa.paInt16, channels=1, rate=24000, output=True)
             for i in range(0, len(audio_np), SAMPLES_PER_FRAME):
                 if i + SAMPLES_PER_FRAME <= len(audio_np):
                     audio_frame = audio_np[i:i + SAMPLES_PER_FRAME]
                 else:
                     audio_frame = np.pad(audio_np[i:], (0, SAMPLES_PER_FRAME - (len(audio_np) - i)), 'constant')
-                if len(audio_frame) < SAMPLES_PER_FRAME:
+                if len(audio_frame) != SAMPLES_PER_FRAME:
                     audio_frame = np.pad(audio_frame, (0, SAMPLES_PER_FRAME - len(audio_frame)), 'constant')
+                print('before entering the queue', audio_frame)
                 await output_queue.put(audio_frame)
 
 if __name__ == "__main__":

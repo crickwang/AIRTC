@@ -8,13 +8,21 @@ import sounddevice as sd
 import re
 import io
 import numpy as np
+import yaml
+import os
 
-VOICE = "zh-CN-XiaoxiaoNeural"
-OUTPUT_FILE = "audio/output.mp3"
-SRT_FILE = "audio/output.srt"
+with open("tts/config.yaml", "r", encoding="utf-8") as f:
+    config = yaml.safe_load(f)
+
+PARENT_DIR = os.path.dirname(os.path.abspath(__file__))
+VOICE = config.get("edge_voice", "zh-CN-XiaoxiaoNeural")
+_out_file = config.get("edge_output", "output.mp3")
+_srt_file = config.get("edge_subtitle", "output.srt")
+OUTPUT_FILE = os.path.join(PARENT_DIR, _out_file)
+SRT_FILE = os.path.join(PARENT_DIR, _srt_file)
 
 class EdgeTTS:
-    def __init__(self, voice="zh-CN-XiaoxiaoNeural", output_file=None, srt_file=None):
+    def __init__(self, voice=VOICE, output_file=OUTPUT_FILE, srt_file=SRT_FILE):
         self.voice = voice
         if output_file is not None:
             self.output_file = Path(output_file)
@@ -80,7 +88,13 @@ class EdgeTTS:
             #stream.write(audio.raw_data)
 
 if __name__ == "__main__":
-    text = open("text/template.txt", "r", encoding="utf-8").read()
-    # print(type(text), text)
-    edge_tts = EdgeTTS(voice="en-US-JennyNeural", output_file=OUTPUT_FILE, srt_file=SRT_FILE)
-    asyncio.run(edge_tts.generate(text))
+    with open("tts/text.txt", "r", encoding="utf-8") as f:
+        texts = f.readlines()
+    for text in texts:
+        text = text.strip()
+        if not text:
+            continue
+        print(f"Processing: {text}")
+        edge_tts = EdgeTTS(voice=VOICE, output_file=OUTPUT_FILE, srt_file=SRT_FILE)
+        asyncio.run(edge_tts.generate(text))
+        print(f"Finished processing: {text}")

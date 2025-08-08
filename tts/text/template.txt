@@ -1,1 +1,6 @@
-Mixed Reality technology can be applied to underground pipeline inspection training.  Utilizing dynamic 3-dimensional models and interactive animations, Mixed Reality simulates the inspection process and demonstrates the fundamental components of the system, including circulation pathways, heat exchanging processes, water pump driving, and temperature-pressure regulations by making abstract concepts more tangible. This approach eliminates the safety risks of traditional hands-on training while improving practical training efficiency
+Mixed Reality technology can be applied to underground pipeline inspection training.  
+Utilizing dynamic 3-dimensional models and interactive animations, 
+Mixed Reality simulates the inspection process and demonstrates the fundamental components of the system, 
+including circulation pathways, heat exchanging processes, water pump driving, 
+and temperature-pressure regulations by making abstract concepts more tangible. 
+This approach eliminates the safety risks of traditional hands-on training while improving practical training efficiency.

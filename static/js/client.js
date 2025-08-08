@@ -219,7 +219,7 @@ function start() {
             echoCancellation: false,
             noiseSuppression: false,
             autoGainControl: false,
-            sampleRate: 16000,  // Match your server's ASR_SAMPLE_RATE
+            sampleRate: 24000,  // Match your server's ASR_SAMPLE_RATE
             channelCount: 1
         },
         video: false

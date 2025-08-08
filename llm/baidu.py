@@ -53,7 +53,12 @@ class BaiduClient:
         except Exception as e:
             print(f"Error in connecting to API: {e}")
 
-    def message(self: object, users=None, system=None, assistants=None) -> list:
+    def message(
+        self: object, 
+        users: list = None, 
+        system: str = None, 
+        assistants: list = None
+        ) -> list:
         """
         Construct a list of messages for the Baidu LLM API.
         Args:
@@ -90,7 +95,13 @@ class BaiduClient:
                 messages.append({'role': 'user', 'content': user})
         return messages
 
-    def generate(self, users=None, system=None, assistants=None, max_tokens=512):
+    def generate(
+        self: object, 
+        users: list = None, 
+        system: str = None, 
+        assistants: list = None, 
+        max_tokens: int = 512
+        ) -> str:
         '''
         Generate a response from the Baidu LLM using the provided API key and base URL.
         Args:
