@@ -2517,3 +2517,657 @@ INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 51642) -> ('
 INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
 ERROR:asyncio:Task was destroyed but it is pending!
 task: <Task pending name='Task-740' coro=<offer.<locals>.on_connectionstatechange() running at C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py:451> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[AsyncIOEventEmitter._emit_run.<locals>.callback() at C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\pyee\asyncio.py:97]>
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 57046) -> ('26.26.26.1', 51744)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 57047) -> ('26.26.26.1', 51744)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 57046) -> ('192.168.12.69', 51745)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 57046) -> ('26.26.26.1', 51744)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 57046) -> ('26.26.26.1', 51744)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 57047) -> ('26.26.26.1', 51744)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 57046) -> ('192.168.12.69', 51745)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 57047) -> ('192.168.12.69', 51745)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 57047) -> ('192.168.12.69', 51745)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 57047) -> ('192.168.12.69', 51745)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+ERROR:asyncio:Task was destroyed but it is pending!
+task: <Task pending name='Task-1992' coro=<offer.<locals>.on_connectionstatechange() running at C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py:451> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[AsyncIOEventEmitter._emit_run.<locals>.callback() at C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\pyee\asyncio.py:97]>
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63396) -> ('26.26.26.1', 50098)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63397) -> ('26.26.26.1', 50098)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63396) -> ('192.168.12.69', 50099)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63396) -> ('26.26.26.1', 50098)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63396) -> ('26.26.26.1', 50098)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63397) -> ('26.26.26.1', 50098)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63396) -> ('192.168.12.69', 50099)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63397) -> ('192.168.12.69', 50099)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63397) -> ('192.168.12.69', 50099)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63397) -> ('192.168.12.69', 50099)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 237, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Check CandidatePair(('26.26.26.1', 49416) -> ('26.26.26.1', 49321)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 49417) -> ('26.26.26.1', 49321)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(1) Check CandidatePair(('26.26.26.1', 49416) -> ('192.168.12.69', 49322)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(1) Check CandidatePair(('26.26.26.1', 49416) -> ('26.26.26.1', 49321)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(1) Check CandidatePair(('26.26.26.1', 49416) -> ('26.26.26.1', 49321)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 49417) -> ('26.26.26.1', 49321)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(1) Check CandidatePair(('26.26.26.1', 49416) -> ('192.168.12.69', 49322)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 49417) -> ('192.168.12.69', 49322)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(1) ICE completed
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 49417) -> ('192.168.12.69', 49322)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 49417) -> ('192.168.12.69', 49322)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 237, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 57280) -> ('26.26.26.1', 61053)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 57281) -> ('26.26.26.1', 61053)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 57280) -> ('192.168.12.69', 61054)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 57280) -> ('26.26.26.1', 61053)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 57280) -> ('26.26.26.1', 61053)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 57281) -> ('26.26.26.1', 61053)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 57280) -> ('192.168.12.69', 61054)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 57281) -> ('192.168.12.69', 61054)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 57280) -> ('192.168.12.69', 61054)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 57281) -> ('192.168.12.69', 61054)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 57281) -> ('192.168.12.69', 61054)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 258, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 64817) -> ('26.26.26.1', 56478)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64818) -> ('26.26.26.1', 56478)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 64817) -> ('192.168.12.69', 56479)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 64817) -> ('26.26.26.1', 56478)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 64817) -> ('26.26.26.1', 56478)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64818) -> ('26.26.26.1', 56478)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 64817) -> ('192.168.12.69', 56479)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64818) -> ('192.168.12.69', 56479)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64818) -> ('192.168.12.69', 56479)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64818) -> ('192.168.12.69', 56479)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+INFO:aioice.ice:Connection(0) Discovered peer reflexive candidate Candidate(PVWOgoTVU2 1 udp 1853824767 192.168.12.69 51981 typ prflx)
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64818) -> ('192.168.12.69', 51981)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64818) -> ('192.168.12.69', 51981)) State.IN_PROGRESS -> State.SUCCEEDED
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 258, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 61889) -> ('26.26.26.1', 55534)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 61890) -> ('26.26.26.1', 55534)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 61889) -> ('192.168.12.69', 55535)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 61889) -> ('26.26.26.1', 55534)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 61889) -> ('26.26.26.1', 55534)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 61890) -> ('26.26.26.1', 55534)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 61889) -> ('192.168.12.69', 55535)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 61890) -> ('192.168.12.69', 55535)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 61890) -> ('192.168.12.69', 55535)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 61890) -> ('192.168.12.69', 55535)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 258, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 49303) -> ('26.26.26.1', 57650)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49304) -> ('26.26.26.1', 57650)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 49303) -> ('192.168.12.69', 57651)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 49303) -> ('26.26.26.1', 57650)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 49303) -> ('26.26.26.1', 57650)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49304) -> ('26.26.26.1', 57650)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 49303) -> ('192.168.12.69', 57651)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49304) -> ('192.168.12.69', 57651)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49304) -> ('192.168.12.69', 57651)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49304) -> ('192.168.12.69', 57651)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+INFO:aioice.ice:Connection(0) Discovered peer reflexive candidate Candidate(78274TKKkf 1 udp 1853824767 192.168.12.69 62286 typ prflx)
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49304) -> ('192.168.12.69', 62286)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49304) -> ('192.168.12.69', 62286)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 61814) -> ('26.26.26.1', 63996)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 61815) -> ('26.26.26.1', 63996)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 61814) -> ('192.168.12.69', 63997)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 61814) -> ('26.26.26.1', 63996)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 61814) -> ('26.26.26.1', 63996)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 61815) -> ('26.26.26.1', 63996)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 61814) -> ('192.168.12.69', 63997)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 61815) -> ('192.168.12.69', 63997)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 61815) -> ('192.168.12.69', 63997)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 61815) -> ('192.168.12.69', 63997)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:root:User stopped recording
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 58238) -> ('26.26.26.1', 58236)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 58239) -> ('26.26.26.1', 58236)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 58238) -> ('192.168.12.69', 58237)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 58238) -> ('26.26.26.1', 58236)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 58238) -> ('26.26.26.1', 58236)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 58239) -> ('26.26.26.1', 58236)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 58238) -> ('192.168.12.69', 58237)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 58239) -> ('192.168.12.69', 58237)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 58239) -> ('192.168.12.69', 58237)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 58239) -> ('192.168.12.69', 58237)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:root:User stopped recording
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63232) -> ('26.26.26.1', 52239)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63233) -> ('26.26.26.1', 52239)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63232) -> ('192.168.12.69', 52240)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63232) -> ('26.26.26.1', 52239)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63232) -> ('26.26.26.1', 52239)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63233) -> ('26.26.26.1', 52239)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63232) -> ('192.168.12.69', 52240)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63233) -> ('192.168.12.69', 52240)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63233) -> ('192.168.12.69', 52240)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63233) -> ('192.168.12.69', 52240)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+INFO:aioice.ice:Connection(0) Discovered peer reflexive candidate Candidate(XatKTbu9kz 1 udp 1853824767 192.168.12.69 61271 typ prflx)
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63233) -> ('192.168.12.69', 61271)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63233) -> ('192.168.12.69', 61271)) State.IN_PROGRESS -> State.SUCCEEDED
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 258, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 56290) -> ('26.26.26.1', 64372)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 56291) -> ('26.26.26.1', 64372)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 56290) -> ('192.168.12.69', 64373)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 56290) -> ('26.26.26.1', 64372)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 56291) -> ('26.26.26.1', 64372)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 56290) -> ('26.26.26.1', 64372)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 56290) -> ('192.168.12.69', 64373)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 56291) -> ('192.168.12.69', 64373)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 56291) -> ('192.168.12.69', 64373)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 56291) -> ('192.168.12.69', 64373)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+ERROR:grpc._channel:Exception iterating requests!
+Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\grpc\_channel.py", line 276, in consume_request_iterator
+    request = next(request_iterator)
+              ^^^^^^^^^^^^^^^^^^^^^^
+TypeError: 'async_generator' object is not an iterator
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 258, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 56272) -> ('26.26.26.1', 56270)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 56273) -> ('26.26.26.1', 56270)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 56272) -> ('192.168.12.69', 56271)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 56272) -> ('26.26.26.1', 56270)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 56272) -> ('26.26.26.1', 56270)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 56273) -> ('26.26.26.1', 56270)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 56272) -> ('192.168.12.69', 56271)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 56273) -> ('192.168.12.69', 56271)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 56273) -> ('192.168.12.69', 56271)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 56273) -> ('192.168.12.69', 56271)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+ERROR:grpc._channel:Exception iterating requests!
+Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\grpc\_channel.py", line 276, in consume_request_iterator
+    request = next(request_iterator)
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 882, in request_generator
+    yield google_tts_config_request(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: 'StreamingSynthesizeRequest' object is not callable
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 258, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 50530) -> ('26.26.26.1', 50528)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50531) -> ('26.26.26.1', 50528)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 50530) -> ('192.168.12.69', 50529)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 50530) -> ('26.26.26.1', 50528)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50531) -> ('26.26.26.1', 50528)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 50530) -> ('26.26.26.1', 50528)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 50530) -> ('192.168.12.69', 50529)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50531) -> ('192.168.12.69', 50529)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50531) -> ('192.168.12.69', 50529)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50531) -> ('192.168.12.69', 50529)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 258, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 50362) -> ('26.26.26.1', 49975)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50363) -> ('26.26.26.1', 49975)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 50362) -> ('192.168.12.69', 49976)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 50362) -> ('26.26.26.1', 49975)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 50362) -> ('26.26.26.1', 49975)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50363) -> ('26.26.26.1', 49975)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 50362) -> ('192.168.12.69', 49976)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50363) -> ('192.168.12.69', 49976)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50363) -> ('192.168.12.69', 49976)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50363) -> ('192.168.12.69', 49976)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+INFO:aioice.ice:Connection(0) Discovered peer reflexive candidate Candidate(hvE25MYaNo 1 udp 1853824767 192.168.12.69 54088 typ prflx)
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50363) -> ('192.168.12.69', 54088)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 50363) -> ('192.168.12.69', 54088)) State.IN_PROGRESS -> State.SUCCEEDED
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 258, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 49227) -> ('26.26.26.1', 49225)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49228) -> ('26.26.26.1', 49225)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 49227) -> ('192.168.12.69', 49226)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 49227) -> ('26.26.26.1', 49225)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 49227) -> ('26.26.26.1', 49225)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49228) -> ('26.26.26.1', 49225)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 49227) -> ('192.168.12.69', 49226)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49228) -> ('192.168.12.69', 49226)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49228) -> ('192.168.12.69', 49226)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 49228) -> ('192.168.12.69', 49226)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 258, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(1) Check CandidatePair(('26.26.26.1', 62684) -> ('26.26.26.1', 51356)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 62685) -> ('26.26.26.1', 51356)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(1) Check CandidatePair(('26.26.26.1', 62684) -> ('192.168.12.69', 51357)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(1) Check CandidatePair(('26.26.26.1', 62684) -> ('26.26.26.1', 51356)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(1) Check CandidatePair(('26.26.26.1', 62684) -> ('26.26.26.1', 51356)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 62685) -> ('26.26.26.1', 51356)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(1) Check CandidatePair(('26.26.26.1', 62684) -> ('192.168.12.69', 51357)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 62685) -> ('192.168.12.69', 51357)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(1) ICE completed
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 62685) -> ('192.168.12.69', 51357)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 62685) -> ('192.168.12.69', 51357)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+INFO:aioice.ice:Connection(1) Discovered peer reflexive candidate Candidate(h9rieKy8ww 1 udp 1853824767 192.168.12.69 58983 typ prflx)
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 62685) -> ('192.168.12.69', 58983)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(1) Check CandidatePair(('192.168.12.69', 62685) -> ('192.168.12.69', 58983)) State.IN_PROGRESS -> State.SUCCEEDED
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 258, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 64117) -> ('26.26.26.1', 64115)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64118) -> ('26.26.26.1', 64115)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 64117) -> ('192.168.12.69', 64116)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 64117) -> ('26.26.26.1', 64115)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 64117) -> ('26.26.26.1', 64115)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64118) -> ('26.26.26.1', 64115)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 64117) -> ('192.168.12.69', 64116)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64118) -> ('192.168.12.69', 64116)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64118) -> ('192.168.12.69', 64116)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64118) -> ('192.168.12.69', 64116)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+INFO:aioice.ice:Connection(0) Discovered peer reflexive candidate Candidate(YDBKfpB0hn 1 udp 1853824767 192.168.12.69 64243 typ prflx)
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64118) -> ('192.168.12.69', 64243)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 64118) -> ('192.168.12.69', 64243)) State.IN_PROGRESS -> State.SUCCEEDED
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 258, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 58459) -> ('26.26.26.1', 51809)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 58460) -> ('26.26.26.1', 51809)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 58459) -> ('192.168.12.69', 51810)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 58459) -> ('26.26.26.1', 51809)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 58459) -> ('26.26.26.1', 51809)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 58460) -> ('26.26.26.1', 51809)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 58459) -> ('192.168.12.69', 51810)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 58460) -> ('192.168.12.69', 51810)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 58460) -> ('192.168.12.69', 51810)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 58460) -> ('192.168.12.69', 51810)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 259, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60857) -> ('26.26.26.1', 59190)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60858) -> ('26.26.26.1', 59190)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60857) -> ('192.168.12.69', 59191)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60857) -> ('26.26.26.1', 59190)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60857) -> ('26.26.26.1', 59190)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60858) -> ('26.26.26.1', 59190)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60857) -> ('192.168.12.69', 59191)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60858) -> ('192.168.12.69', 59191)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60858) -> ('192.168.12.69', 59191)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60858) -> ('192.168.12.69', 59191)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+INFO:aioice.ice:Connection(0) Discovered peer reflexive candidate Candidate(YDiYEySLug 1 udp 1853824767 192.168.12.69 51549 typ prflx)
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60858) -> ('192.168.12.69', 51549)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60858) -> ('192.168.12.69', 51549)) State.IN_PROGRESS -> State.SUCCEEDED
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 259, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60507) -> ('26.26.26.1', 64441)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60508) -> ('26.26.26.1', 64441)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60507) -> ('192.168.12.69', 64442)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60507) -> ('26.26.26.1', 64441)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60507) -> ('26.26.26.1', 64441)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60508) -> ('26.26.26.1', 64441)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60507) -> ('192.168.12.69', 64442)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60508) -> ('192.168.12.69', 64442)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60508) -> ('192.168.12.69', 64442)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60508) -> ('192.168.12.69', 64442)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 259, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 55290) -> ('26.26.26.1', 51608)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 55291) -> ('26.26.26.1', 51608)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 55290) -> ('192.168.12.69', 51609)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 55290) -> ('26.26.26.1', 51608)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 55290) -> ('26.26.26.1', 51608)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 55291) -> ('26.26.26.1', 51608)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 55290) -> ('192.168.12.69', 51609)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 55291) -> ('192.168.12.69', 51609)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 55291) -> ('192.168.12.69', 51609)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 55291) -> ('192.168.12.69', 51609)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 259, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60272) -> ('26.26.26.1', 60270)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60273) -> ('26.26.26.1', 60270)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60272) -> ('192.168.12.69', 60271)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60272) -> ('26.26.26.1', 60270)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60272) -> ('26.26.26.1', 60270)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60273) -> ('26.26.26.1', 60270)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 60272) -> ('192.168.12.69', 60271)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60273) -> ('192.168.12.69', 60271)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60273) -> ('192.168.12.69', 60271)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 60273) -> ('192.168.12.69', 60271)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+WARNING:aiortc.rtcrtpsender:RTCRtpsender(audio) Traceback (most recent call last):
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 367, in _run_rtp
+    enc_frame = await self._next_encoded_frame(codec)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\Apps\anacoda\envs\llllm\Lib\site-packages\aiortc\rtcrtpsender.py", line 294, in _next_encoded_frame
+    data = await self.__track.recv()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\crick\courses\Low-Latency-LLM\webrtc_server.py", line 259, in recv
+    self._audio_buffer.extend(audio_data)
+TypeError: 'NoneType' object is not iterable
+
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.221.86 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.208.253 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.134.9 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.47.114 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.232.159 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Could not bind to 169.254.0.64 - [WinError 10049] The requested address is not valid in its context
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63152) -> ('26.26.26.1', 58771)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63153) -> ('26.26.26.1', 58771)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63152) -> ('192.168.12.69', 58772)) State.FROZEN -> State.WAITING
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63152) -> ('26.26.26.1', 58771)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63152) -> ('26.26.26.1', 58771)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63153) -> ('26.26.26.1', 58771)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('26.26.26.1', 63152) -> ('192.168.12.69', 58772)) State.WAITING -> State.FAILED
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63153) -> ('192.168.12.69', 58772)) State.FROZEN -> State.FAILED
+INFO:aioice.ice:Connection(0) ICE completed
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63153) -> ('192.168.12.69', 58772)) State.FAILED -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63153) -> ('192.168.12.69', 58772)) State.IN_PROGRESS -> State.SUCCEEDED
+INFO:httpx:HTTP Request: POST https://aistudio.baidu.com/llm/lmapi/v3/chat/completions "HTTP/1.1 200 OK"
+INFO:aioice.ice:Connection(0) Discovered peer reflexive candidate Candidate(ZQV8rr2aKL 1 udp 1853824767 192.168.12.69 57434 typ prflx)
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63153) -> ('192.168.12.69', 57434)) State.WAITING -> State.IN_PROGRESS
+INFO:aioice.ice:Connection(0) Check CandidatePair(('192.168.12.69', 63153) -> ('192.168.12.69', 57434)) State.IN_PROGRESS -> State.SUCCEEDED
