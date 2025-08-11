@@ -62,10 +62,10 @@ class EdgeTTS:
                         elif chunk["type"] == "subtitle":
                             sub.feed(chunk)
                     self.srt_file.write_text(sub.get_srt(), encoding='utf-8')
-        temp_chunks = b''.join(chunks)
-        mp3 = AudioSegment.from_file(io.BytesIO(temp_chunks), format="mp3")
-        pcm = np.frombuffer(mp3.raw_data, dtype=np.int16)
-        print(pcm[:100], pcm.shape, pcm.dtype)
+        # temp_chunks = b''.join(chunks)
+        # mp3 = AudioSegment.from_file(io.BytesIO(temp_chunks), format="mp3")
+        # pcm = np.frombuffer(mp3.raw_data, dtype=np.int16)
+        #print(pcm[:100], pcm.shape, pcm.dtype)
         #sd.play(pcm, samplerate=mp3.frame_rate)
         return chunks
     

@@ -204,7 +204,7 @@ class AudioPlayer(AudioStreamTrack):
         self._total_samples = 0
         self._consecutive_silence = 0
         
-        print(f"OptimizedAudioPlayer: Initialized with {self.samples_per_frame} samples/frame")
+        #print(f"OptimizedAudioPlayer: Initialized with {self.samples_per_frame} samples/frame")
         
     async def recv(self) -> AudioFrame:
         """
@@ -225,7 +225,7 @@ class AudioPlayer(AudioStreamTrack):
                     timeout=timeout
                 )
                 
-                if audio_data is None:
+                if audio_data is None :
                     # End marker received
                     self._ending = True
                     print(f"AudioPlayer: End marker received, buffer has {len(self._audio_buffer)} samples")
@@ -418,9 +418,9 @@ async def offer(request: web.Request) -> web.Response:
     pc_id = f"PC-{uuid.uuid4().hex[:8]}"
     pcs.add(pc)
 
-    print(f"\n{'='*50}")
-    print(f"{pc_id}: New connection from {request.remote}")
-    print(f"{'='*50}")
+    # print(f"\n{'='*50}")
+    # print(f"{pc_id}: New connection from {request.remote}")
+    # print(f"{'='*50}")
 
     # Create session-specific queues
     llm_queue = asyncio.Queue(maxsize=50)
@@ -612,7 +612,9 @@ async def google_asr(track: AudioStreamTrack, stop_event: asyncio.Event = None) 
         asr_thread = threading.Thread(target=run_google_stream, daemon=True)
         frame = await track.recv()
         # Once connection established and recieves the first dummy frame, start the ASR thread
+        print('='*50)
         print("Start recording audio")
+        print('='*50)
         asr_thread.start()
         while True:
             if (stop_event and stop_event.is_set()) or audio_stream.last_transcript_was_final:
