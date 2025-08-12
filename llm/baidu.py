@@ -142,7 +142,32 @@ if __name__ == "__main__":
     model = "ernie-4.5-0.3b"
     system_prompt = "You are a helpful assistant."
     users = ["count from 1 to 10 and 10 to 0 plz? Be more elaborate."]
-    
+    buffer = ''
     baidu_client = BaiduClient(model=model, api_key=api_key, base_url=base_url)
-    response = baidu_client.generate(users=users, system=system_prompt)
-    print(response)
+    chat_completion = baidu_client.generate(users=users, system=system_prompt, max_tokens=32)
+    output = []
+    for chunk in chat_completion:
+        response = chunk.choices[0].delta.content
+        print(response, end='', flush=True)
+        prev = 0
+        for i, char in enumerate(response):
+            if char != '\n':
+                if char in ['。', '！', '？', '.', '!', '?']:
+                    # If punctuation, send the buffer
+                    if buffer:
+                        temp_text = buffer + response[prev:i+1]
+                        temp_text = temp_text.strip(' \n*\"')
+                        output.append(temp_text)
+                        buffer = ""
+                    else:
+                        temp_text = response[prev:i+1]
+                        temp_text = temp_text.strip(' \n*\"')
+                        output.append(temp_text)
+                    prev = i + 1
+            else:
+                prev = i + 1
+        buffer += response[prev:]
+        buffer.strip(' \n*\"')
+    output.append(buffer.strip(' \n*\"'))
+    print()
+    print(output)

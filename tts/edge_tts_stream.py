@@ -37,7 +37,7 @@ class EdgeTTS:
         else:
             self.srt_file = None
 
-    async def process_audio(self, text) -> None:
+    async def generate(self, text) -> None:
         chunks = []
         com = communicate.Communicate(text=text, voice=self.voice)
         sub = submaker.SubMaker() if self.srt_file else None
@@ -69,7 +69,7 @@ class EdgeTTS:
         #sd.play(pcm, samplerate=mp3.frame_rate)
         return chunks
     
-    async def generate(self, text):
+    async def play(self, text):
         '''
         Generate audio from text and play it.
         Args:
@@ -96,5 +96,5 @@ if __name__ == "__main__":
             continue
         print(f"Processing: {text}")
         edge_tts = EdgeTTS(voice=VOICE, output_file=OUTPUT_FILE, srt_file=SRT_FILE)
-        asyncio.run(edge_tts.generate(text))
+        asyncio.run(edge_tts.play(text))
         print(f"Finished processing: {text}")

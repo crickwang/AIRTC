@@ -1,0 +1,35 @@
+# Core web framework and async support
+aiohttp==3.9.1
+asyncio-mqtt==0.16.1
+
+# WebRTC and audio processing
+aiortc==1.6.0
+av==11.0.0
+pyaudio==0.2.11
+sounddevice==0.4.6
+pydub==0.25.1
+
+# Audio and signal processing
+numpy==1.24.3
+soundfile==0.12.1
+
+# Google Cloud services (ASR/TTS)
+google-cloud-speech==2.21.0
+google-cloud-texttospeech==2.16.3
+
+# OpenAI API client
+openai==1.12.0
+
+# Microsoft Edge TTS
+edge-tts==6.1.9
+
+# FunASR (optional - uncomment if using local ASR)
+# funasr==1.0.23
+# modelscope==1.9.5
+
+# Configuration and environment
+PyYAML==6.0.1
+python-dotenv==1.0.0
+
+# HTTP requests
+requests==2.31.0

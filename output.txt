@@ -1,28 +1,0 @@
-======== Running on http://0.0.0.0:8081 ========
-(Press CTRL+C to quit)
-PC-21de105d: Received audio track
-PC-21de105d: Starting ASR
-PC-21de105d: Connection state: connecting
-PC-21de105d: Connection state: connected
-==================================================
-Start recording audio
-==================================================
-[0;31m[K540: 资源[0;31m[K660: 原理[0;31m[K1260: 原理[0;32m[K1920: 原理
-[0;37m[KPC-21de105d: ASR result: '原理'
-PC-21de105d: Pipeline started
-LLM: Generating response for: '原理'
-Request sent at 0.9293415546417236, waiting for response...
-LLM: Generated 31 characters
-LLM: Sent end marker
-TTS: Starting simple streaming TTS
-TTS: Received text chunk: '原理是计算机硬件和软件在处理数据和逻辑运算时的基本机制和流程。...'
-TTS: Extracted 1 sentences, remaining: '...'
-TTS: Processing sentence 1 immediately
-TTS: Starting TTS for sentence 1: '原理是计算机硬件和软件在处理数据和逻辑运算时的基本机制和流程。...'
-TTS: Error processing sentence 1: Unknown field for StreamingSynthesizeConfig: audio_config
-TTS: End of input from LLM
-TTS: Completed - 1 sentences, 0 samples
-TTS: Sent end marker
-AudioPlayer: End marker received, buffer has 0 samples
-PC-21de105d: Connection state: closed
-PC-21de105d: Connection closed and cleaned up

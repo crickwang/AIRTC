@@ -18,7 +18,7 @@ import io
 from fractions import Fraction
 import sounddevice as sd
 import pyaudio as pa
-from collections import OrderedDict
+from collections import OrderedDict, deque
 
 from dotenv import load_dotenv
 from aiohttp import web
@@ -75,7 +75,7 @@ ASR_ENCODER_CHUNK_LOOK_BACK = 4
 ASR_DECODER_CHUNK_LOOK_BACK = 1
 STREAMING_LIMIT = 60000  # 1 minute, in ms
 ENERGY_THRESHOLD = 0.01  # Energy threshold for voice activity detection
-CHUNK_SIZE = int(ASR_SAMPLE_RATE / 100)
+CHUNK_SIZE = int(ASR_SAMPLE_RATE / 10)
 
 SYSTEM_PROMPT = config.get("llm_system_prompt", None)
 LLM_API_KEY = os.environ.get("BAIDU_AISTUDIO_API_KEY")
@@ -144,7 +144,8 @@ google_tts_streaming_config = texttospeech.StreamingSynthesizeConfig(
         language_code=TTS_LANGUAGE,
     )
 )
-# Set the config for your stream. The first request must contain your config, and then each subsequent request must contain text.
+# Set the config for your stream. The first request must contain your config, 
+# and then each subsequent request must contain text.
 google_tts_config_request = texttospeech.StreamingSynthesizeRequest(
     streaming_config=google_tts_streaming_config
 )
@@ -183,38 +184,31 @@ class AudioPrinterTrack(AudioStreamTrack):
               f"with sample rate {frame.sample_rate}")
         return frame
 
-import asyncio
-import numpy as np
-from fractions import Fraction
-from av import AudioFrame
-from aiortc import AudioStreamTrack
-from pydub import AudioSegment
-import io
-import re
-from collections import deque
-
-# Constants - Use larger chunks for efficiency
-AUDIO_SAMPLE_RATE = 24000
-SAMPLES_PER_FRAME = 240  # 10ms frames for WebRTC
-CHUNK_SIZE = 2400  # 100ms chunks for TTS processing
-
 class AudioPlayer(AudioStreamTrack):
     """
-    Fixed AudioPlayer that properly handles large amounts of incoming audio.
+    Receive and audio frame from the track and 
+    send it to another connected peer through a WebRTC connection.
     """
     kind = "audio"
     
-    def __init__(self, audio_queue: asyncio.Queue, sample_rate: int = AUDIO_SAMPLE_RATE):
+    def __init__(self, audio_queue: asyncio.Queue, sample_rate: int = AUDIO_SAMPLE_RATE) -> None:
+        """
+        Initialize the AudioPlayer with the given audio queue and sample rate.
+        Args:
+            audio_queue (asyncio.Queue): The queue to receive audio frames from.
+            sample_rate (int, optional): The sample rate of the audio. 
+                                         Defaults to AUDIO_SAMPLE_RATE = 24000.
+        Returns:
+            None
+        """
         super().__init__()
         self.audio_queue = audio_queue
         self.sample_rate = sample_rate
         self._timestamp = 0
-        self.samples_per_frame = SAMPLES_PER_FRAME
+        self.samples_per_frame = sample_rate // 100
         
         # Use deque for efficient buffer management
         self._audio_buffer = deque()
-        
-        # MUCH LARGER buffer thresholds to handle the large audio chunks
         self._min_buffer = self.samples_per_frame * 100   # 1000ms minimum
         self._target_buffer = self.samples_per_frame * 200  # 2000ms target  
         self._max_buffer = self.samples_per_frame * 500   # 5000ms maximum
@@ -228,15 +222,20 @@ class AudioPlayer(AudioStreamTrack):
         self._total_samples_played = 0
         self._consecutive_silence = 0
         
-        # Timing control - MUCH more conservative
         self._last_frame_time = time.time()
-        self._frame_interval = self.samples_per_frame / self.sample_rate  # 0.01 seconds for 240 samples at 24kHz
-        
-        print(f"AudioPlayer: Initialized with large buffers - min:{self._min_buffer}, target:{self._target_buffer}, max:{self._max_buffer}")
-        
+        # 0.01 seconds for 240 samples at 24kHz
+        self._frame_interval = self.samples_per_frame / self.sample_rate  
+
+        print(f"AudioPlayer: Initialized with large buffers - min:{self._min_buffer}, "
+              f"target:{self._target_buffer}, max:{self._max_buffer}")
+
     async def recv(self) -> AudioFrame:
         """
-        Generate audio frames with proper handling of large audio streams.
+        Generate audio frames and send them to the connected peer.
+        Args:
+            self: The class instance.
+        Returns:
+            frame (AudioFrame): The generated audio frame.
         """
         # Control frame timing first
         await self._control_frame_timing()
@@ -252,10 +251,11 @@ class AudioPlayer(AudioStreamTrack):
             self._consecutive_silence = 0
             self._total_samples_played += self.samples_per_frame
             
-            # Less frequent logging
-            if self._frames_sent % 50 == 0:
-                print(f"AudioPlayer: Frame {self._frames_sent}, buffer={len(self._audio_buffer)}, played={self._total_samples_played}, received={self._total_samples_received}")
-                
+            # # Less frequent logging
+            # if self._frames_sent % 50 == 0:
+            #     print(f"AudioPlayer: Frame {self._frames_sent}, buffer={len(self._audio_buffer)}, "
+            #           f"played={self._total_samples_played}, received={self._total_samples_received}")
+
         else:
             # Buffer underrun - send silence
             audio_array = np.zeros((1, self.samples_per_frame), dtype=np.int16)
@@ -265,14 +265,19 @@ class AudioPlayer(AudioStreamTrack):
             if self._ending and len(self._audio_buffer) == 0:
                 if not self._ended:
                     self._ended = True
-                    print(f"AudioPlayer: Playback complete. Frames: {self._frames_sent}, Played: {self._total_samples_played}, Received: {self._total_samples_received}")
-            
-            # Log underruns but not too frequently
-            if self._consecutive_silence == 1:
-                print(f"AudioPlayer: Buffer underrun at frame {self._frames_sent}, buffer: {len(self._audio_buffer)}, received: {self._total_samples_received}")
-            elif self._consecutive_silence % 100 == 0:
-                print(f"AudioPlayer: Extended underrun - {self._consecutive_silence} consecutive silence frames")
-        
+                    # print(f"AudioPlayer: Playback complete. Frames: {self._frames_sent}, "
+                    #       f"Played: {self._total_samples_played}, "
+                    #       f"Received: {self._total_samples_received}")
+
+            # # Log underruns but not too frequently
+            # if self._consecutive_silence == 1:
+            #     print(f"AudioPlayer: Buffer underrun at frame {self._frames_sent}, "
+            #           f"buffer: {len(self._audio_buffer)}, "
+            #           f"received: {self._total_samples_received}")
+            # elif self._consecutive_silence % 100 == 0:
+            #     print(f"AudioPlayer: Extended underrun - {self._consecutive_silence} "
+            #           f"consecutive silence frames")
+
         # Create frame
         frame = AudioFrame.from_ndarray(audio_array, format='s16', layout='mono')
         frame.sample_rate = self.sample_rate
@@ -329,8 +334,10 @@ class AudioPlayer(AudioStreamTrack):
                 if audio_data is None:
                     # End marker received
                     self._ending = True
-                    print(f"AudioPlayer: End marker received, buffer has {len(self._audio_buffer)} samples")
-                    print(f"AudioPlayer: Total received: {self._total_samples_received}, Total played: {self._total_samples_played}")
+                    print(f"AudioPlayer: End marker received, "
+                          f"buffer has {len(self._audio_buffer)} samples")
+                    print(f"AudioPlayer: Total received: {self._total_samples_received}, "
+                          f"Total played: {self._total_samples_played}")
                     break
                 
                 # Add to buffer with proper tracking
@@ -350,21 +357,25 @@ class AudioPlayer(AudioStreamTrack):
                     
                     if len(data_list) > available_space:
                         dropped = len(data_list) - available_space
-                        print(f"AudioPlayer: Buffer overflow - dropped {dropped} samples (buffer: {len(self._audio_buffer)})")
+                        print(f"AudioPlayer: Buffer overflow - dropped {dropped} "
+                              f"samples (buffer: {len(self._audio_buffer)})")
                 else:
-                    print(f"AudioPlayer: Buffer full ({len(self._audio_buffer)}), dropping {len(data_list)} samples")
-                
+                    print(f"AudioPlayer: Buffer full ({len(self._audio_buffer)}), "
+                          f"dropping {len(data_list)} samples")
+
                 fill_attempts += 1
                 
                 # Start playback when we have enough buffer
                 if not self._started and len(self._audio_buffer) >= self._target_buffer:
                     self._started = True
-                    print(f"AudioPlayer: Starting playback with {len(self._audio_buffer)} samples buffered")
-                
+                    print(f"AudioPlayer: Starting playback with "
+                          f"{len(self._audio_buffer)} samples buffered")
+
                 # Log progress for large buffers
                 if fill_attempts % 10 == 0:
-                    print(f"AudioPlayer: Filled {fill_attempts} chunks, buffer now: {len(self._audio_buffer)}")
-                    
+                    print(f"AudioPlayer: Filled {fill_attempts} chunks, "
+                          f"buffer now: {len(self._audio_buffer)}")
+
             except asyncio.TimeoutError:
                 # If we haven't started yet, keep waiting
                 if not self._started and not self._ending:
@@ -386,7 +397,12 @@ class TestToneGenerator(AudioStreamTrack):
     Generate a test tone for testing without input audio
     """
     kind = "audio"
-    def __init__(self: object, queue: asyncio.Queue, frequency: int = 440, sample_rate: int = 16000) -> None:
+    def __init__(
+        self: object, 
+        queue: asyncio.Queue, 
+        frequency: int = 440, 
+        sample_rate: int = 16000
+        ) -> None:
         """
         Create a test case for WebRTC Client to receive audio with 
         a queue, frequency, and sample rate.
@@ -456,17 +472,6 @@ class TestToneGenerator(AudioStreamTrack):
         frame.pts = self._timestamp
         self._timestamp += self.samples_per_frame
         return frame
-    
-async def debug_queues():
-    """Enhanced queue monitoring"""
-    while True:
-        await asyncio.sleep(1)
-        
-        # Check if queues exist and are the right objects
-        print(f"Queue sizes - LLM->TTS: {llm_tts_queue.qsize()}, "
-              f"TTS->Output: {tts_output_queue.qsize()}")
-        print(f"Queue IDs - LLM->TTS: {id(llm_tts_queue)}, "
-              f"TTS->Output: {id(tts_output_queue)}")
         
 async def index(request: web.Request) -> web.Response:
     """
@@ -541,13 +546,10 @@ async def offer(request: web.Request) -> web.Response:
         
         if track.kind == "audio":
             recorder.addTrack(track)
-            
             # Create stop event
             stop_event = asyncio.Event()
             pc._stop_event = stop_event
-            
             try:
-                # Run ASR
                 print(f"{pc_id}: Starting ASR")
                 text = await google_asr(track, stop_event)
                 
@@ -558,7 +560,7 @@ async def offer(request: web.Request) -> web.Response:
                 
                 print(f"{pc_id}: ASR result: '{text}'")
                 
-                # Start pipeline tasks
+                # Start pipeline tasks of LLM and TTS
                 pc._llm_task = asyncio.create_task(
                     llm_generator(text, llm_queue, llm_client, SYSTEM_PROMPT, MAX_TOKENS)
                 )
@@ -570,7 +572,6 @@ async def offer(request: web.Request) -> web.Response:
                 
             except Exception as e:
                 print(f"{pc_id}: Pipeline error: {e}")
-                import traceback
                 traceback.print_exc()
                 await llm_queue.put(None)
                 await audio_queue.put(None)
@@ -689,7 +690,10 @@ async def google_asr(track: AudioStreamTrack, stop_event: asyncio.Event = None) 
                     speech.StreamingRecognizeRequest(audio_content=content)
                     for content in audio_stream.generate()
                 )
-                responses = google_asr_client.streaming_recognize(google_asr_streaming_config, requests)
+                responses = google_asr_client.streaming_recognize(
+                    google_asr_streaming_config, 
+                    requests,
+                )
                 transcript = listen_print_loop(responses, audio_stream)
             output_queue.put(transcript)
         asr_thread = threading.Thread(target=run_google_stream, daemon=True)
@@ -719,9 +723,25 @@ async def google_asr(track: AudioStreamTrack, stop_event: asyncio.Event = None) 
         audio_queue.put(None)
     return output_queue.get()
 
-async def llm_generator(text: str, output_queue: asyncio.Queue, llm_client, system_prompt=None, max_tokens=512):
+async def llm_generator(
+    text: str, 
+    output_queue: asyncio.Queue, 
+    llm_client: object, 
+    system_prompt=None, 
+    max_tokens=512
+    ) -> None:
     """
-    Optimized LLM generator with better streaming.
+    LLM that generates texts based on the incoming trancribed message of the user
+    Args:
+        text (str): The input text to generate a response for, also known as the user input
+        output_queue (asyncio.Queue): The queue to send the generated response to
+        llm_client (object): The LLM client to use for generating responses
+        system_prompt (str, optional): The system prompt to use for the LLM, defaults to None
+        max_tokens (int, optional): The maximum number of tokens to generate, defaults to 512
+    Returns:
+        None
+    Raises:
+        Exception: If an error occurs during text generation.
     """
     print(f"LLM: Generating response for: '{text}'")
     total_output = ""
@@ -736,21 +756,36 @@ async def llm_generator(text: str, output_queue: asyncio.Queue, llm_client, syst
         
         # Buffer for combining small chunks
         buffer = ""
-        
         for chunk in chat_completion:
             response = chunk.choices[0].delta.content
-            if response:
-                buffer += response
-                total_output += response
-                
-                # Send when we have a complete sentence or substantial text
-                if any(buffer.endswith(p) for p in ['.', '!', '?', '。', '！', '？', '\n']) or len(buffer) > 50:
-                    await output_queue.put(buffer)
-                    buffer = ""
-        
-        # Send any remaining buffer
+            print(response, end='', flush=True)
+            prev = 0
+            # split each response based on common puntuations.
+            # Strip the uncommon symbols for each chunk.
+            for i, char in enumerate(response):
+                # skip newlines
+                if char != '\n':
+                    if char in ['。', '！', '？', '.', '!', '?']:
+                        # If punctuation, send the buffer
+                        if buffer:
+                            temp_text = buffer + response[prev:i+1]
+                            buffer = ""
+                        else:
+                            temp_text = response[prev:i+1]
+                        temp_text = temp_text.strip(' \n*\"‘’“”；：')
+                        await output_queue.put(temp_text)
+                        print(f"temp_text in LLM is {temp_text}")
+                        prev = i + 1
+                else:
+                    prev = i + 1
+            buffer += response[prev:]
+            buffer.strip(' \n*\"‘’“”；：')
+            
+            print(f"buffer in LLM is {buffer}")
+            #await asyncio.sleep(5)
+
         if buffer:
-            await output_queue.put(buffer)
+            await output_queue.put(buffer.strip(' \n*\"‘’“”；：'))
         
         print(f"LLM: Generated {len(total_output)} characters")
         
@@ -763,10 +798,22 @@ async def llm_generator(text: str, output_queue: asyncio.Queue, llm_client, syst
         await output_queue.put(None)
         print("LLM: Sent end marker")
 
-
-async def local_tts(input_queue: asyncio.Queue, output_queue: asyncio.Queue, tts_model):
+async def local_tts(
+    input_queue: asyncio.Queue, 
+    output_queue: asyncio.Queue, 
+    tts_model: object
+    ) -> None:
     """
-    Optimized TTS with larger chunks and better flow control.
+    TTS model that runs locally, transcribing text in to speech with predefined model.
+    Args:
+        input_queue (asyncio.Queue): The queue to get input text from
+        output_queue (asyncio.Queue): The queue to send generated audio to
+        tts_model (object): The TTS model to use for generating audio
+    Returns:
+        None
+    Raises:
+        asyncio.TimeoutError: If a timeout occurs while waiting for input.
+        Exception: If an error occurs during transcription.
     """
     print("TTS: Starting optimized transcription")
     total_samples_generated = 0
@@ -824,19 +871,27 @@ async def local_tts(input_queue: asyncio.Queue, output_queue: asyncio.Queue, tts
         # Send end marker
         await output_queue.put(None)
         print("TTS: Sent end marker")
-        
-async def process_text_chunk(text: str, output_queue: asyncio.Queue, tts_model) -> int:
+
+async def process_text_chunk(text: str, output_queue: asyncio.Queue, tts_model: object) -> int:
     """
     Process a single text chunk and return number of samples generated.
+    Args:
+        text (str): The text to process.
+        output_queue (asyncio.Queue): The queue to send generated audio to.
+        tts_model (object): The TTS model to use for generating audio.
+    Returns:
+        int: The number of audio samples generated.
+    Raises:
+        Exception: If an error occurs during chunk processing.
     """
     if not text.strip():
         return 0
     
-    print(f"TTS: Processing: '{text[:50]}...'")
+    print(f"TTS: Processing: '{text[:20]}...'")
     
     try:
         # Generate TTS audio
-        audio_chunks = await tts_model.process_audio(text)
+        audio_chunks = await tts_model.generate(text)
         if not audio_chunks:
             print(f"TTS: No audio generated for: {text}")
             return 0
@@ -878,81 +933,18 @@ async def process_text_chunk(text: str, output_queue: asyncio.Queue, tts_model) 
         print(f"TTS: Error processing chunk '{text[:30]}...': {e}")
         return 0
 
-class OrderedAudioBuffer:
-    """
-    Ensures audio chunks are sent to output queue in the correct order,
-    even when TTS tasks complete out of sequence.
-    """
-    def __init__(self, output_queue: asyncio.Queue):
-        self.output_queue = output_queue
-        self.pending_audio = OrderedDict()  # {sentence_id: audio_data}
-        self.next_expected_id = 1
-        self.lock = asyncio.Lock()
-        
-    async def add_audio(self, sentence_id: int, audio_data: np.ndarray):
-        """Add audio for a sentence, maintaining order."""
-        async with self.lock:
-            print(f"OrderedBuffer: Received audio for sentence {sentence_id}")
-            self.pending_audio[sentence_id] = audio_data
-            
-            # Send any sequential audio that's ready
-            await self._send_ready_audio()
-    
-    async def _send_ready_audio(self):
-        """Send audio chunks in correct order."""
-        while self.next_expected_id in self.pending_audio:
-            sentence_id = self.next_expected_id
-            audio_data = self.pending_audio.pop(sentence_id)
-            
-            print(f"OrderedBuffer: Sending audio for sentence {sentence_id} in correct order")
-            
-            # Send audio chunks for this sentence
-            if len(audio_data) > 0:
-                await self._send_audio_chunks(audio_data, sentence_id)
-            
-            self.next_expected_id += 1
-    
-    async def _send_audio_chunks(self, audio_np: np.ndarray, sentence_id: int):
-        """Send audio data in appropriate chunks."""
-        chunk_size = SAMPLES_PER_FRAME * 4  # 40ms chunks
-        chunks_sent = 0
-        
-        for i in range(0, len(audio_np), chunk_size):
-            chunk = audio_np[i:min(i + chunk_size, len(audio_np))]
-            
-            if len(chunk) < SAMPLES_PER_FRAME and i + chunk_size >= len(audio_np):
-                chunk = np.pad(chunk, (0, SAMPLES_PER_FRAME - len(chunk)), 'constant')
-            
-            await self.output_queue.put(chunk)
-            chunks_sent += 1
-            
-            # Small delay to prevent overwhelming
-            if chunks_sent % 8 == 0:
-                await asyncio.sleep(0.001)
-        
-        print(f"OrderedBuffer: Sent {chunks_sent} chunks for sentence {sentence_id}")
-    
-    async def finalize(self):
-        """Send any remaining audio and end marker."""
-        async with self.lock:
-            # Send any remaining audio in order
-            remaining_ids = sorted(self.pending_audio.keys())
-            for sentence_id in remaining_ids:
-                if sentence_id >= self.next_expected_id:
-                    audio_data = self.pending_audio.pop(sentence_id)
-                    print(f"OrderedBuffer: Sending final audio for sentence {sentence_id}")
-                    await self._send_audio_chunks(audio_data, sentence_id)
-            
-            # Send end marker
-            await self.output_queue.put(None)
-            print("OrderedBuffer: Sent end marker")
-
-# Also update the TTS function to send audio in better chunks
 async def online_tts(input_queue: asyncio.Queue, output_queue: asyncio.Queue):
     """
-    TTS with optimized chunking to work better with the AudioPlayer.
+    TTS model that uses API calls, transcribing text in to speech with API calls.
+    Args:
+        input_queue (asyncio.Queue): The queue to receive text chunks from.
+        output_queue (asyncio.Queue): The queue to send generated audio to.
+    Returns:
+        None
+    Raises:
+        asyncio.TimeoutError: If a timeout occurs while waiting for input.
+        Exception: If an error occurs during transcription.
     """
-    print("TTS: Starting optimized chunking TTS")
     total_samples_generated = 0
     sentence_count = 0
     
@@ -968,7 +960,7 @@ async def online_tts(input_queue: asyncio.Queue, output_queue: asyncio.Queue):
                     if text_buffer.strip():
                         sentence_count += 1
                         print(f"TTS: Processing final sentence {sentence_count}")
-                        samples = await process_with_optimized_chunks(
+                        samples = await process_chunks(
                             text_buffer.strip(), output_queue, sentence_count
                         )
                         total_samples_generated += samples
@@ -978,14 +970,14 @@ async def online_tts(input_queue: asyncio.Queue, output_queue: asyncio.Queue):
                 text_buffer += text_chunk
                 
                 # Extract complete sentences
-                sentences, text_buffer = extract_sentences_simple(text_buffer)
+                sentences, text_buffer = extract_sentences(text_buffer)
                 
                 # Process each complete sentence
                 for sentence in sentences:
                     if sentence.strip():
                         sentence_count += 1
                         print(f"TTS: Processing sentence {sentence_count}")
-                        samples = await process_with_optimized_chunks(
+                        samples = await process_chunks(
                             sentence.strip(), output_queue, sentence_count
                         )
                         total_samples_generated += samples
@@ -997,7 +989,7 @@ async def online_tts(input_queue: asyncio.Queue, output_queue: asyncio.Queue):
                 print("TTS: Timeout waiting for input")
                 if text_buffer.strip():
                     sentence_count += 1
-                    samples = await process_with_optimized_chunks(
+                    samples = await process_chunks(
                         text_buffer.strip(), output_queue, sentence_count
                     )
                     total_samples_generated += samples
@@ -1019,9 +1011,18 @@ async def online_tts(input_queue: asyncio.Queue, output_queue: asyncio.Queue):
         await output_queue.put(None)
         print("TTS: Sent end marker")
 
-async def process_with_optimized_chunks(sentence: str, output_queue: asyncio.Queue, sentence_id: int) -> int:
+async def process_chunks(sentence: str, output_queue: asyncio.Queue, sentence_id: int) -> int:
     """
-    Process sentence and send audio in optimized chunks for the AudioPlayer.
+    Process sentence and send audio in optimized chunks.
+    Args:
+        sentence (str): The sentence to process.
+        output_queue (asyncio.Queue): The queue to send audio chunks to.
+        sentence_id (int): The ID of the sentence being processed. IDs are generated sequentially
+            based on the incoming order from the input_queue.
+    Returns:
+        int: The number of audio samples generated for the sentence.
+    Raises:
+        Exception: If there is an error processing the sentence.
     """
     if not sentence.strip():
         return 0
@@ -1065,16 +1066,18 @@ async def process_with_optimized_chunks(sentence: str, output_queue: asyncio.Que
         if all_audio:
             # Combine all audio for this sentence
             combined_audio = np.concatenate(all_audio)
-            combined_audio = apply_audio_improvements_simple(combined_audio)
-            
-            print(f"TTS: Sentence {sentence_id} - sending {len(combined_audio)} samples in optimized chunks")
-            
+            #combined_audio = apply_audio_improvements(combined_audio)
+
+            print(f"TTS: Sentence {sentence_id} - sending {len(combined_audio)} "
+                  f"samples in optimized chunks")
+
             # Send in larger, more consistent chunks
             await send_audio_optimized_chunks(combined_audio, output_queue, sentence_id)
         
         processing_time = time.time() - start_time
-        print(f"TTS: Sentence {sentence_id} completed in {processing_time:.2f}s, {total_samples} samples total")
-        
+        print(f"TTS: Sentence {sentence_id} completed in {processing_time:.2f}s, "
+              f"{total_samples} samples total")
+
         return total_samples
         
     except Exception as e:
@@ -1083,9 +1086,19 @@ async def process_with_optimized_chunks(sentence: str, output_queue: asyncio.Que
         traceback.print_exc()
         return 0
 
-async def send_audio_optimized_chunks(audio_np: np.ndarray, output_queue: asyncio.Queue, sentence_id: int):
+async def send_audio_optimized_chunks(
+    audio_np: np.ndarray, 
+    output_queue: asyncio.Queue, 
+    sentence_id: int
+    ) -> None:
     """
-    Send audio in larger, more consistent chunks that work better with AudioPlayer buffering.
+    Send audio in larger, more consistent chunks that work better with buffering.
+    Args:
+        audio_np (np.ndarray): The audio data to send.
+        output_queue (asyncio.Queue): The queue to send audio chunks to.
+        sentence_id (int): The ID of the sentence being processed.
+    Returns:
+        None
     """
     if len(audio_np) == 0:
         return
@@ -1115,8 +1128,15 @@ async def send_audio_optimized_chunks(audio_np: np.ndarray, output_queue: asynci
     
     print(f"TTS: Successfully sent {chunks_sent} optimized chunks for sentence {sentence_id}")
 
-def extract_sentences_simple(text_buffer: str) -> tuple:
-    """Simple sentence extraction - same as before."""
+def extract_sentences(text_buffer: str) -> tuple:
+    """
+    Extract sentences from the text buffer.
+    Args:
+        text_buffer (str): The text buffer to extract sentences from.
+
+    Returns:
+        tuple: A tuple containing a list of extracted sentences and any remaining text.
+    """
     if not text_buffer.strip():
         return [], ""
     
@@ -1148,22 +1168,22 @@ def extract_sentences_simple(text_buffer: str) -> tuple:
     print(f"TTS: Extracted {len(sentences)} sentences, remaining: '{remaining[:30]}...'")
     return sentences, remaining.strip()
 
-def apply_audio_improvements_simple(audio_np: np.ndarray) -> np.ndarray:
-    """Apply basic audio improvements."""
-    if len(audio_np) == 0:
-        return audio_np
+# def apply_audio_improvements(audio_np: np.ndarray) -> np.ndarray:
+#     """Apply basic audio improvements."""
+#     if len(audio_np) == 0:
+#         return audio_np
     
-    # Remove DC offset
-    if len(audio_np) > 1:
-        audio_np = audio_np - np.mean(audio_np)
+#     # Remove DC offset
+#     if len(audio_np) > 1:
+#         audio_np = audio_np - np.mean(audio_np)
     
-    # Simple clipping prevention
-    max_val = np.max(np.abs(audio_np))
-    if max_val > 30000:
-        compression_ratio = 30000 / max_val
-        audio_np = (audio_np * compression_ratio).astype(np.int16)
+#     # Simple clipping prevention
+#     max_val = np.max(np.abs(audio_np))
+#     if max_val > 30000:
+#         compression_ratio = 30000 / max_val
+#         audio_np = (audio_np * compression_ratio).astype(np.int16)
     
-    return audio_np
+#     return audio_np
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Minimal WebRTC audio logger")
