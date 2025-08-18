@@ -44,7 +44,7 @@ google_asr_streaming_config = speech.StreamingRecognitionConfig(
 )
 
 # Resampler to change audio properties if needed
-resampler = AudioResampler(rate=AUDIO_SAMPLE_RATE, layout=LAYOUT, format=FORMAT)
+resampler = AudioResampler(rate=ASR_SAMPLE_RATE, layout=LAYOUT, format=FORMAT)
 llm_client = BaiduClient(model=LLM_MODEL, api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
 tts_model = EdgeTTS()
 
@@ -69,8 +69,18 @@ llm_start_time = 0
 tts_first_chunk_time = 0
 tts_start_time = 0
 
+
 # p = pa.PyAudio()
 # stream = p.open(format=pa.paInt16, channels=1, rate=AUDIO_SAMPLE_RATE, output=True)
+
+class VAD:
+    def __init__(self):
+        super().__init__()
+
+    def is_speech(self, frame: np.ndarray) -> bool:
+        energy = np.sum(frame.astype(np.float32) ** 2) / len(frame)
+        return energy
+vad = VAD()
 
 class AudioPrinterTrack(AudioStreamTrack):
     """ A track that prints audio data received from the remote peer. """
@@ -428,6 +438,7 @@ async def offer(request: web.Request) -> web.Response:
     # print(f"{'='*50}")
 
     # Create session-specific queues
+    asr_queue = asyncio.Queue(maxsize=50)
     llm_queue = asyncio.Queue(maxsize=50)
     audio_queue = asyncio.Queue(maxsize=500)
     
@@ -466,23 +477,19 @@ async def offer(request: web.Request) -> web.Response:
             # Create stop event
             stop_event = asyncio.Event()
             pc._stop_event = stop_event
+            interrupt_event = asyncio.Event()
+            pc._interrupt_event = interrupt_event
             try:
                 print(f"{pc_id}: Starting ASR")
-                text = await google_asr(track, stop_event)
-                
-                if not text or text.strip() == "":
-                    print(f"{pc_id}: Empty ASR result")
-                    await audio_queue.put(None)
-                    return
-                
-                print(f"{pc_id}: ASR result: '{text}'")
-                
+                pc._asr_task = asyncio.create_task(
+                    google_asr(track, stop_event, interrupt_event, asr_queue, vad=vad))
+
                 # Start pipeline tasks of LLM and TTS
                 pc._llm_task = asyncio.create_task(
-                    llm_generator(text, llm_queue, llm_client, SYSTEM_PROMPT, MAX_TOKENS)
+                    llm_generator(asr_queue, llm_queue, llm_client, SYSTEM_PROMPT, MAX_TOKENS, stop_event, interrupt_event)
                 )
                 pc._tts_task = asyncio.create_task(
-                    online_tts(llm_queue, audio_queue)
+                    online_tts(llm_queue, audio_queue, stop_event, interrupt_event)
                 )
                 
                 print(f"{pc_id}: Pipeline started")
@@ -575,7 +582,18 @@ async def local_asr(track: AudioStreamTrack, stop_event: asyncio.Event = None) -
     print(f"Final transcription: {text}")
     return text
 
-async def google_asr(track: AudioStreamTrack, stop_event: asyncio.Event = None) -> str:
+async def google_asr(
+    track: AudioStreamTrack, 
+    stop_event: asyncio.Event, 
+    interrupt_event: asyncio.Event,
+    output_queue: asyncio.Queue,
+    vad=None,
+    vad_threshold=VAD_THRESHOLD,
+    sample_rate=ASR_SAMPLE_RATE,
+    chunk_size=ASR_CHUNK_SIZE,
+    language_code=ASR_LANGUAGE,
+    timeout=TIMEOUT,
+) -> None:
     """
     Perform ASR transcription on the audio track.
     Args:
@@ -587,65 +605,86 @@ async def google_asr(track: AudioStreamTrack, stop_event: asyncio.Event = None) 
         Exception: If an error occurs during transcription.
         MediaStreamError: If the media stream is interrupted by the user.
     """
-    # pass the incoming track into the AudioStream
-    audio_queue = queue.Queue()
-    # retrieve the transcription result from the asr_thread
-    output_queue = queue.Queue()
-    audio_stream = AudioStream(
-        audio_queue, 
-        rate=ASR_SAMPLE_RATE, 
-        chunk_size=CHUNK_SIZE, 
-        language_code=ASR_LANGUAGE,
-    )
     try:
-        def run_google_stream():
-            """
-            Run the Google ASR streaming transcription in a separate thread.
-            """
-            with audio_stream:
-                requests = (
-                    speech.StreamingRecognizeRequest(audio_content=content)
-                    for content in audio_stream.generate()
-                )
-                responses = google_asr_client.streaming_recognize(
-                    google_asr_streaming_config, 
-                    requests,
-                )
-                transcript = listen_print_loop(responses, audio_stream)
-            output_queue.put(transcript)
-        asr_thread = threading.Thread(target=run_google_stream, daemon=True)
-        frame = await track.recv()
-        # Once connection established and recieves the first dummy frame, start the ASR thread
-        print('='*50)
-        print("Start recording audio")
-        print('='*50)
-        asr_thread.start()
-        while True:
-            if (stop_event and stop_event.is_set()) or audio_stream.last_transcript_was_final:
-                audio_stream.closed = True
-                break
-            # Continuously receive audio frames from the track
-            frame = await track.recv()
+        while not stop_event.is_set():
+            frame = await asyncio.wait_for(track.recv(), timeout=timeout)
             frame = resampler.resample(frame)[0].to_ndarray()
             frame = np.squeeze(frame, axis=0).astype(np.int16)
             audio_bytes = frame.tobytes()
-            audio_queue.put(audio_bytes)
+            if (not vad) or (vad.is_speech(frame) > vad_threshold):
+                # Once connection established and recieves the first dummy frame, start the ASR thread
+                print('='*50)
+                print("Start recording audio")
+                print('='*50)
+        # pass the incoming track into the AudioStream
+                audio_queue = queue.Queue()
+                session_output_queue = queue.Queue(maxsize=1)
+                # retrieve the transcription result from the asr_thread
+                audio_stream = AudioStream(
+                    audio_queue, 
+                    rate=sample_rate, 
+                    chunk_size=chunk_size, 
+                    language_code=language_code,
+                )
+                audio_bytes = frame.tobytes()
+                audio_queue.put(audio_bytes)
+                def run_google_stream():
+                    """
+                    Run the Google ASR streaming transcription in a separate thread.
+                    """
+                    with audio_stream:
+                        requests = (
+                            speech.StreamingRecognizeRequest(audio_content=content)
+                            for content in audio_stream.generate()
+                        )
+                        responses = google_asr_client.streaming_recognize(
+                            google_asr_streaming_config, 
+                            requests,
+                        )
+                        transcript = listen_print_loop(responses, audio_stream)
+                    session_output_queue.put(transcript)
+                asr_thread = threading.Thread(target=run_google_stream, daemon=True)
+                asr_thread.start()
+                while True:
+                    if stop_event.is_set():
+                        audio_stream.closed = True
+                        await output_queue.put(None)
+                        asr_thread.join(timeout=0)
+                        break
+                    if audio_stream.last_transcript_was_final:
+                        audio_stream.closed = True
+                        interrupt_event.clear()
+                        asr_thread.join(timeout=5)
+                        transcript = session_output_queue.get_nowait() if not session_output_queue.empty() else None
+                        await output_queue.put(transcript)
+                        break
+                    if audio_stream.is_speaking:
+                        # If the user is speaking, continue to receive audio frames
+                        interrupt_event.set()
+                    # Continuously receive audio frames from the track
+                    frame = await track.recv()
+                    frame = resampler.resample(frame)[0].to_ndarray()
+                    frame = np.squeeze(frame, axis=0).astype(np.int16)
+                    vad.is_speech(frame)
+                    audio_bytes = frame.tobytes()
+                    audio_queue.put(audio_bytes)
+    except asyncio.TimeoutError:
+        logger.info(f"User stops speaking for {timeout} seconds, ending ASR session")
     except MediaStreamError:
         logger.info("User stopped recording")      
     except Exception as e:
         logger.error(f"Error during ASR transcription: {type(e).__name__}: {e}")
         traceback.print_exc()
-    finally:
-        # Signal the end of audio stream
-        audio_queue.put(None)
-    return output_queue.get()
 
 async def llm_generator(
-    text: str, 
+    input_queue: asyncio.Queue, 
     output_queue: asyncio.Queue, 
     llm_client: object, 
     system_prompt=None, 
-    max_tokens=512
+    max_tokens=512,
+    stop_event: asyncio.Event=None,
+    interrupt_event: asyncio.Event=None,
+    timeout=TIMEOUT,
     ) -> None:
     """
     LLM that generates texts based on the incoming trancribed message of the user
@@ -660,62 +699,84 @@ async def llm_generator(
     Raises:
         Exception: If an error occurs during text generation.
     """
-    print(f"LLM: Generating response for: '{text}'")
-    total_output = ""
-    llm_start_time = time.time()
     try:
-        # Stream the response
-        chat_completion = llm_client.generate(
-            users=[text],
-            system=system_prompt,
-            max_tokens=max_tokens,
-        )
-        init = True
-        # Buffer for combining small chunks
-        buffer = ""
-        for chunk in chat_completion:
-            response = chunk.choices[0].delta.content
-            
-            # if init:
-            #     init_text = response[:10] if len(response) > 10 else response
-            #     await output_queue.put(init_text)
-            #     response = response[10:] if len(response) > 10 else ""
-            #     init = False
-                
-            #print(response, end='', flush=True)
-            prev = 0
-            # split each response based on common puntuations.
-            # Strip the uncommon symbols for each chunk.
-            for i, char in enumerate(response):
-                # skip newlines
-                if char != '\n':
-                    if char in ['。', '，', '！', '？', '.', ',', '!', '?'] and i > prev + 10:
-                        # If punctuation, send the buffer
-                        if buffer:
-                            temp_text = buffer + response[prev:i+1]
-                            buffer = ""
-                        else:
-                            temp_text = response[prev:i+1]
-                        #temp_text = temp_text.strip(' \n*\"‘’“”；：')
-                        await output_queue.put(temp_text)
-                        print(f"\ntemp_text in LLM is {temp_text}")
+        texts = []
+        assistants = []
+        while not stop_event.is_set():
+            text = await asyncio.wait_for(input_queue.get(), timeout=timeout)
+            texts.append(text)
+            if stop_event.is_set() or text is None:
+                await output_queue.put(None)
+                return 
+            print(f"LLM: Generating response for: '{text}'")
+            llm_start_time = time.time()
+                # Stream the response
+            chat_completion = llm_client.generate(
+                users=texts,
+                system=system_prompt,
+                assistants=assistants,
+                max_tokens=max_tokens,
+            )
+            total_response = ""
+            # Buffer for combining small chunks
+            buffer = ""
+            for chunk in chat_completion:
+                response = chunk.choices[0].delta.content
+                total_response += response
+                # if init:
+                #     init_text = response[:10] if len(response) > 10 else response
+                #     await output_queue.put(init_text)
+                #     response = response[10:] if len(response) > 10 else ""
+                #     init = False
+                    
+                #print(response, end='', flush=True)
+                prev = 0
+                # split each response based on common puntuations.
+                # Strip the uncommon symbols for each chunk.
+                for i, char in enumerate(response):
+                    if stop_event.is_set():
+                        await output_queue.put(None)
+                        return
+                    if interrupt_event.is_set():
+                        await output_queue.put(None)
+                        break
+                    # skip newlines
+                    if char != '\n':
+                        if char in ['。', '，', '！', '？', '.', ',', '!', '?'] and i > prev + 10:
+                            # If punctuation, send the buffer
+                            if buffer:
+                                temp_text = buffer + response[prev:i+1]
+                                buffer = ""
+                            else:
+                                temp_text = response[prev:i+1]
+                            #temp_text = temp_text.strip(' \n*\"‘’“”；：')
+                            await output_queue.put(temp_text)
+                            print(f"\ntemp_text in LLM is {temp_text}")
+                            prev = i + 1
+                    else:
                         prev = i + 1
-                else:
-                    prev = i + 1
-            buffer += response[prev:]
-            #buffer.strip(' \n*\"‘’“”；：')
-            global llm_first_chunk_time
-            llm_first_chunk_time = time.time()
-            print(f"LLM: First chunk took {llm_first_chunk_time - llm_start_time:.2f} seconds")
+                buffer += response[prev:]
+                #buffer.strip(' \n*\"‘’“”；：')
+                global llm_first_chunk_time
+                llm_first_chunk_time = time.time()
+                print(f"LLM: First chunk took {llm_first_chunk_time - llm_start_time:.2f} seconds")
 
-            print(f"\nbuffer in LLM is {buffer}")
-            #await asyncio.sleep(5)
+                print(f"\nbuffer in LLM is {buffer}")
+                #await asyncio.sleep(5)
+                
+                if interrupt_event.is_set():
+                    print("LLM: Interrupt event set, stopping generation")
+                    await output_queue.put(None)
+                    break
 
-        if buffer:
-            await output_queue.put(buffer)
-        
-        print(f"LLM: Generated {len(total_output)} characters")
-        
+            if interrupt_event.is_set():
+                print("LLM: Interrupt event set, stopping generation")
+                await output_queue.put(None)
+            elif buffer:
+                await output_queue.put(buffer)
+            assistants.append(total_response)
+            print(f"LLM: Generated {len(total_response)} characters")
+
     except Exception as e:
         print(f"LLM: Error: {e}")
         import traceback
@@ -728,7 +789,9 @@ async def llm_generator(
 async def local_tts(
     input_queue: asyncio.Queue, 
     output_queue: asyncio.Queue, 
-    tts_model: object
+    tts_model: object,
+    stop_event: asyncio.Event = None,
+    interrupt_event: asyncio.Event = None,
     ) -> None:
     """
     TTS model that runs locally, transcribing text in to speech with predefined model.
@@ -748,17 +811,27 @@ async def local_tts(
     try:
         text_buffer = ""
         
-        while True:
+        while not stop_event.is_set():
             try:
                 # Get text from LLM
-                text = await asyncio.wait_for(input_queue.get(), timeout=30.0)
+                text = await asyncio.wait_for(input_queue.get(), timeout=TIMEOUT)
+                print(f"TTS received text: {text}")
+                if interrupt_event.is_set():
+                    print("TTS: Interrupt event set, stopping transcription")
+                    await output_queue.put(None)
+                    break
                 
+                if stop_event.is_set():
+                    print("TTS: Stop event set, stopping transcription")
+                    await output_queue.put(None)
+                    continue
+
                 if text is None:
                     print("TTS: End of input")
                     # Process any remaining buffered text
                     if text_buffer.strip():
                         await process_text_chunk(text_buffer, output_queue, tts_model)
-                    break
+                    continue
                 
                 # Add to buffer
                 text_buffer += text
@@ -777,7 +850,12 @@ async def local_tts(
                 for sentence in sentences:
                     if not sentence.strip():
                         continue
-                    
+                    if stop_event.is_set():
+                        print("TTS: Stop event set, skipping sentence")
+                        break
+                    if interrupt_event.is_set():
+                        print("TTS: Interrupt event set, skipping sentence")
+                        break
                     samples = await process_text_chunk(sentence, output_queue, tts_model)
                     total_samples_generated += samples
                     
@@ -840,7 +918,7 @@ async def process_text_chunk(text: str, output_queue: asyncio.Queue, tts_model: 
         print(f"TTS: Generated {len(audio_np)} samples")
         
         # Send in larger chunks for efficiency
-        chunk_size = CHUNK_SIZE  # 2400 samples = 100ms
+        chunk_size = AUDIO_CHUNK_SIZE  
         for i in range(0, len(audio_np), chunk_size):
             chunk = audio_np[i:min(i + chunk_size, len(audio_np))]
             
@@ -860,7 +938,13 @@ async def process_text_chunk(text: str, output_queue: asyncio.Queue, tts_model: 
         print(f"TTS: Error processing chunk '{text[:30]}...': {e}")
         return 0
 
-async def online_tts(input_queue: asyncio.Queue, output_queue: asyncio.Queue):
+async def online_tts(
+    input_queue: asyncio.Queue, 
+    output_queue: asyncio.Queue,
+    stop_event: asyncio.Event,
+    interrupt_event: asyncio.Event,
+    timeout=TIMEOUT
+    ) -> None:
     """
     Optimized TTS that truly streams audio as it's generated.
     
@@ -877,11 +961,20 @@ async def online_tts(input_queue: asyncio.Queue, output_queue: asyncio.Queue):
         text_buffer = ""
         current_tts_task = None
         
-        while True:
+        while not stop_event.is_set():
             try:
                 # Get text from LLM
-                text_chunk = await asyncio.wait_for(input_queue.get(), timeout=30.0)
-                
+                text_chunk = await asyncio.wait_for(input_queue.get(), timeout=timeout)
+            
+                if stop_event.is_set():
+                    print("TTS: Stop event set, skipping chunk")
+                    break
+                    
+                if interrupt_event.is_set():
+                    print("TTS: Interrupt event set, skipping chunk")
+                    await output_queue.put(None)
+                    continue
+
                 if text_chunk is None:
                     print("TTS: End of input from LLM")
                     # Wait for current TTS to finish
@@ -895,7 +988,7 @@ async def online_tts(input_queue: asyncio.Queue, output_queue: asyncio.Queue):
                             text_buffer.strip(), output_queue, sentence_count
                         )
                         total_samples_generated += samples
-                    break
+                    continue
                 
                 print(f"TTS: Received text chunk: '{text_chunk[:50]}...'")
                 text_buffer += text_chunk
@@ -906,6 +999,11 @@ async def online_tts(input_queue: asyncio.Queue, output_queue: asyncio.Queue):
                 for sentence in sentences:
                     if sentence.strip():
                         sentence_count += 1
+                        
+                        if stop_event.is_set() or interrupt_event.is_set():
+                            if current_tts_task and not current_tts_task.done():
+                                current_tts_task.cancel()
+                            break
                         
                         # Wait for previous TTS to finish before starting new one
                         # This prevents overwhelming the API while maintaining order

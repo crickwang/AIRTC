@@ -29,6 +29,7 @@ from av.audio.resampler import AudioResampler
 from aiortc.mediastreams import MediaStreamError
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
 import torch.hub
+import speech_recognition as sr
 
 # ASR imports
 from google.cloud import speech_v1 as speech, texttospeech

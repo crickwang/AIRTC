@@ -28,7 +28,7 @@ ASR_MODEL_PATH = settings.get_config("asr_model_path")
 ASR_ENCODER_CHUNK_LOOK_BACK = 4
 ASR_DECODER_CHUNK_LOOK_BACK = 1
 STREAMING_LIMIT = 60000  # 1 minute, in ms
-VAD_THRESHOLD = 0.01  # Voice Activity Detection threshold
+VAD_THRESHOLD = 5000  # Voice Activity Detection threshold
 TIMEOUT = 600 # in sec
 
 GOOGLE_PROJ_ID = settings.get_env("GOOGLE_PROJ_ID")

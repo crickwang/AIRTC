@@ -73,6 +73,66 @@ tts_start_time = 0
 # p = pa.PyAudio()
 # stream = p.open(format=pa.paInt16, channels=1, rate=AUDIO_SAMPLE_RATE, output=True)
 
+class VAD:
+    """
+     Voice Activity Detection with better speech detection.
+    """
+    def __init__(self, threshold=VAD_THRESHOLD, speech_frames_required=3):
+        self.threshold = threshold
+        self.speech_frames_required = speech_frames_required
+        self.speech_frame_count = 0
+        self.is_currently_speaking = False
+        self.frames = [None for i in range(speech_frames_required)]
+        
+    def populate(self, frame:np.ndarray) -> None:
+        """
+        Populate the VAD frames with the current audio frame.
+        Args:
+            frame (np.ndarray): The audio frame to populate.
+        Returns:
+            None
+        """
+        self.frames.pop(0)
+        self.frames.append(frame)
+        
+    def is_speech(self, frame: np.ndarray) -> bool:
+        """
+        Detect if frame contains speech with hysteresis to avoid false positives.
+        """
+        # Calculate RMS energy
+        if len(frame) == 0:
+            return False
+            
+        rms_energy = np.sqrt(np.mean(frame.astype(np.float32) ** 2))
+        
+        # Use hysteresis for more stable detection
+        self.populate(frame)
+        if rms_energy > self.threshold:
+            self.speech_frame_count += 1
+            if self.speech_frame_count >= self.speech_frames_required:
+                if not self.is_currently_speaking:
+                    print(f"VAD: Speech detected (energy: {rms_energy:.1f})")
+                self.is_currently_speaking = True
+                self.speech_frame_count = 0
+        return self.is_currently_speaking
+
+class SimpleVAD:
+    """
+    A simple Voice Activity Detection (VAD) class.
+    """
+    def __init__(self, threshold=VAD_THRESHOLD):
+        self.threshold = threshold
+
+    def is_speech(self, frame: np.ndarray) -> bool:
+        """
+        Detect if frame contains speech.
+        """
+        if len(frame) == 0:
+            return False
+
+        rms_energy = np.sqrt(np.mean(frame.astype(np.float32) ** 2))
+        return rms_energy > self.threshold
+
 class AudioPrinterTrack(AudioStreamTrack):
     """ A track that prints audio data received from the remote peer. """
     kind = "audio"
@@ -104,99 +164,62 @@ class AudioPrinterTrack(AudioStreamTrack):
 
 class AudioPlayer(AudioStreamTrack):
     """
-    Receive and audio frame from the track and 
-    send it to another connected peer through a WebRTC connection.
+     AudioPlayer with proper interruption support and buffer management.
     """
     kind = "audio"
     
-    def __init__(self, audio_queue: asyncio.Queue, sample_rate: int = AUDIO_SAMPLE_RATE) -> None:
-        """
-        Initialize the AudioPlayer with the given audio queue and sample rate.
-        Args:
-            audio_queue (asyncio.Queue): The queue to receive audio frames from.
-            sample_rate (int, optional): The sample rate of the audio. 
-                                         Defaults to AUDIO_SAMPLE_RATE = 24000.
-        Returns:
-            None
-        """
+    def __init__(self, audio_queue: asyncio.Queue, sample_rate: int = 24000) -> None:
         super().__init__()
         self.audio_queue = audio_queue
         self.sample_rate = sample_rate
         self._timestamp = 0
-        self.samples_per_frame = sample_rate // 100
+        self.samples_per_frame = sample_rate // 100  # 10ms frames
         
-        # Use deque for efficient buffer management
+        # Simplified buffer management
         self._audio_buffer = deque()
-        self._min_buffer = self.samples_per_frame * 100   # 1000ms minimum
-        self._target_buffer = self.samples_per_frame * 200  # 2000ms target  
-        self._max_buffer = self.samples_per_frame * 500   # 5000ms maximum
+        self._max_buffer_ms = 500  # Maximum 500ms of audio buffered
+        self._max_buffer_samples = (self._max_buffer_ms * sample_rate) // 1000
         
         # State tracking
-        self._started = False
-        self._ending = False
-        self._ended = False
+        self._is_playing = False
+        self._interrupt_requested = False
         self._frames_sent = 0
-        self._total_samples_received = 0
-        self._total_samples_played = 0
-        self._consecutive_silence = 0
         
+        # Timing control
         self._last_frame_time = time.time()
-        # 0.01 seconds for 240 samples at 24kHz
-        self._frame_interval = self.samples_per_frame / self.sample_rate  
-
-        print(f"AudioPlayer: Initialized with large buffers - min:{self._min_buffer}, "
-              f"target:{self._target_buffer}, max:{self._max_buffer}")
+        self._frame_interval = self.samples_per_frame / self.sample_rate
+        
+        print(f"AudioPlayer: Initialized with {self._max_buffer_ms}ms max buffer")
 
     async def recv(self) -> AudioFrame:
-        """
-        Generate audio frames and send them to the connected peer.
-        Args:
-            self: The class instance.
-        Returns:
-            frame (AudioFrame): The generated audio frame.
-        """
-        # Control frame timing first
-        await self._control_frame_timing()
+        """Generate audio frames with proper interruption support."""
+        await self._control_timing()
         
-        # Fill buffer aggressively when empty
-        await self._fill_buffer_aggressively()
+        # Handle interruption immediately
+        if self._interrupt_requested:
+            self._clear_buffers()
+            self._interrupt_requested = False
+            self._is_playing = False
+            print("AudioPlayer: Interrupt processed, buffers cleared")
         
-        # Generate output frame
-        if len(self._audio_buffer) >= self.samples_per_frame:
-            # Extract exactly samples_per_frame from buffer
-            frame_data = [self._audio_buffer.popleft() for _ in range(self.samples_per_frame)]
-            audio_array = np.array(frame_data, dtype=np.int16).reshape(1, -1)
-            self._consecutive_silence = 0
-            self._total_samples_played += self.samples_per_frame
-            
-            # # Less frequent logging
-            # if self._frames_sent % 50 == 0:
-            #     print(f"AudioPlayer: Frame {self._frames_sent}, buffer={len(self._audio_buffer)}, "
-            #           f"played={self._total_samples_played}, received={self._total_samples_received}")
-
+        # Try to fill buffer if not interrupted
+        if not self._interrupt_requested:
+            await self._fill_buffer()
+        
+        # Generate frame
+        if len(self._audio_buffer) >= self.samples_per_frame and not self._interrupt_requested:
+            # Extract audio samples
+            frame_samples = [self._audio_buffer.popleft() for _ in range(self.samples_per_frame)]
+            audio_array = np.array(frame_samples, dtype=np.int16).reshape(1, -1)
+            self._is_playing = True
         else:
-            # Buffer underrun - send silence
+            # Send silence if buffer empty or interrupted
             audio_array = np.zeros((1, self.samples_per_frame), dtype=np.int16)
-            self._consecutive_silence += 1
-            
-            # If we're ending and buffer is empty, mark as ended
-            if self._ending and len(self._audio_buffer) == 0:
-                if not self._ended:
-                    self._ended = True
-                    # print(f"AudioPlayer: Playback complete. Frames: {self._frames_sent}, "
-                    #       f"Played: {self._total_samples_played}, "
-                    #       f"Received: {self._total_samples_received}")
-
-            # # Log underruns but not too frequently
-            # if self._consecutive_silence == 1:
-            #     print(f"AudioPlayer: Buffer underrun at frame {self._frames_sent}, "
-            #           f"buffer: {len(self._audio_buffer)}, "
-            #           f"received: {self._total_samples_received}")
-            # elif self._consecutive_silence % 100 == 0:
-            #     print(f"AudioPlayer: Extended underrun - {self._consecutive_silence} "
-            #           f"consecutive silence frames")
-
-        # Create frame
+            if self._is_playing:
+                print("AudioPlayer: Buffer empty, sending silence")
+                self._is_playing = False
+        
+        # Create and return frame
         frame = AudioFrame.from_ndarray(audio_array, format='s16', layout='mono')
         frame.sample_rate = self.sample_rate
         frame.time_base = Fraction(1, self.sample_rate)
@@ -207,108 +230,70 @@ class AudioPlayer(AudioStreamTrack):
         
         return frame
     
-    async def _control_frame_timing(self):
-        """
-        Control frame timing to match WebRTC expectations (10ms intervals).
-        """
+    async def _control_timing(self):
+        """Control frame timing for consistent 10ms intervals."""
         current_time = time.time()
         elapsed = current_time - self._last_frame_time
         
-        # WebRTC expects frames every 10ms (0.01 seconds)
-        target_interval = self._frame_interval
-        
-        if elapsed < target_interval:
-            sleep_time = target_interval - elapsed
-            if sleep_time > 0.001:  # Only sleep if meaningful
+        if elapsed < self._frame_interval:
+            sleep_time = self._frame_interval - elapsed
+            if sleep_time > 0.001:
                 await asyncio.sleep(sleep_time)
         
         self._last_frame_time = time.time()
     
-    async def _fill_buffer_aggressively(self):
-        """
-        Fill buffer aggressively to handle large incoming audio streams.
-        """
-        # Don't wait if we have enough audio or we're ending
-        if len(self._audio_buffer) >= self._min_buffer and self._started:
+    async def _fill_buffer(self):
+        """Fill audio buffer without blocking."""
+        # Don't overfill buffer
+        if len(self._audio_buffer) >= self._max_buffer_samples:
             return
         
-        # Fill more aggressively when buffer is low
-        fill_attempts = 0
-        max_attempts = 20 if len(self._audio_buffer) < self.samples_per_frame * 10 else 10
-        
-        while (len(self._audio_buffer) < self._target_buffer and 
-               not self._ending and 
-               fill_attempts < max_attempts):
+        # Try to get audio data (non-blocking)
+        try:
+            audio_data = self.audio_queue.get_nowait()
             
-            try:
-                # Much longer timeout to wait for audio
-                timeout = 0.1 if not self._started else 0.05
+            if audio_data is None:
+                # End marker - let buffer drain naturally
+                print("AudioPlayer: End marker received")
+                return
+            
+            # Add to buffer
+            if isinstance(audio_data, np.ndarray):
+                samples_to_add = audio_data.tolist()
+            else:
+                samples_to_add = list(audio_data)
+            
+            # Prevent buffer overflow
+            available_space = self._max_buffer_samples - len(self._audio_buffer)
+            if available_space > 0:
+                actual_samples = samples_to_add[:available_space]
+                self._audio_buffer.extend(actual_samples)
                 
-                audio_data = await asyncio.wait_for(
-                    self.audio_queue.get(), 
-                    timeout=timeout
-                )
-                
-                if audio_data is None:
-                    # End marker received
-                    self._ending = True
-                    # print(f"AudioPlayer: End marker received, "
-                    #       f"buffer has {len(self._audio_buffer)} samples")
-                    # print(f"AudioPlayer: Total received: {self._total_samples_received}, "
-                    #       f"Total played: {self._total_samples_played}")
-                    break
-                
-                # Add to buffer with proper tracking
-                if isinstance(audio_data, np.ndarray):
-                    data_list = audio_data.tolist()
-                else:
-                    data_list = list(audio_data)
-                
-                # Track received samples
-                self._total_samples_received += len(data_list)
-                
-                # Prevent buffer overflow but don't drop audio unnecessarily
-                available_space = self._max_buffer - len(self._audio_buffer)
-                if available_space > 0:
-                    data_to_add = data_list[:available_space]
-                    self._audio_buffer.extend(data_to_add)
-                    
-                    if len(data_list) > available_space:
-                        dropped = len(data_list) - available_space
-                        print(f"AudioPlayer: Buffer overflow - dropped {dropped} "
-                              f"samples (buffer: {len(self._audio_buffer)})")
-                else:
-                    print(f"AudioPlayer: Buffer full ({len(self._audio_buffer)}), "
-                          f"dropping {len(data_list)} samples")
-
-                fill_attempts += 1
-                
-                # Start playback when we have enough buffer
-                if not self._started and len(self._audio_buffer) >= self._target_buffer:
-                    self._started = True
-                    print(f"AudioPlayer: Starting playback with "
-                          f"{len(self._audio_buffer)} samples buffered")
-
-                # Log progress for large buffers
-                if fill_attempts % 10 == 0:
-                    print(f"AudioPlayer: Filled {fill_attempts} chunks, "
-                          f"buffer now: {len(self._audio_buffer)}")
-
-            except asyncio.TimeoutError:
-                # If we haven't started yet, keep waiting
-                if not self._started and not self._ending:
-                    continue
-                break
+                if len(samples_to_add) > available_space:
+                    dropped = len(samples_to_add) - available_space
+                    print(f"AudioPlayer: Dropped {dropped} samples due to buffer overflow")
+            
+        except asyncio.QueueEmpty:
+            # No audio available, continue
+            pass
     
-    def _create_silence_frame(self):
-        """Create a silence frame."""
-        audio_array = np.zeros((1, self.samples_per_frame), dtype=np.int16)
-        frame = AudioFrame.from_ndarray(audio_array, format='s16', layout='mono')
-        frame.sample_rate = self.sample_rate
-        frame.time_base = Fraction(1, self.sample_rate)
-        frame.pts = self._timestamp
-        self._timestamp += self.samples_per_frame
-        return frame
+    def request_interrupt(self):
+        """Request immediate interruption of audio playback."""
+        self._interrupt_requested = True
+        print("AudioPlayer: Interrupt requested")
+    
+    def _clear_buffers(self):
+        """Clear all audio buffers immediately."""
+        self._audio_buffer.clear()
+        
+        # Also clear the queue to prevent old audio from playing
+        try:
+            while True:
+                self.audio_queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+        
+        print(f"AudioPlayer: Buffers cleared")
 
 class TestToneGenerator(AudioStreamTrack):
     """
@@ -415,7 +400,7 @@ async def javascript(request: web.Request) -> web.Response:
 
 async def offer(request: web.Request) -> web.Response:
     """
-    Optimized offer handler with better resource management.
+    Offer handler with proper interruption support.
     """
     params = await request.json()
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
@@ -424,18 +409,18 @@ async def offer(request: web.Request) -> web.Response:
     pc_id = f"PC-{uuid.uuid4().hex[:8]}"
     pcs.add(pc)
 
-    # print(f"\n{'='*50}")
-    # print(f"{pc_id}: New connection from {request.remote}")
-    # print(f"{'='*50}")
+    print(f"{pc_id}: New connection established")
 
     # Create session-specific queues
-    asr_queue = asyncio.Queue(maxsize=50)
-    llm_queue = asyncio.Queue(maxsize=50)
-    audio_queue = asyncio.Queue(maxsize=500)
+    asr_queue = asyncio.Queue(maxsize=20)
+    llm_queue = asyncio.Queue(maxsize=20)
+    audio_queue = asyncio.Queue(maxsize=100)  # Smaller queue for better responsiveness
     
-    # Create and add audio player
+    # Create  components
     recorder = MediaBlackhole()
-    audio_player = AudioPlayer(audio_queue)
+    audio_player = AudioPlayer(audio_queue, sample_rate=24000)
+    _vad = SimpleVAD()
+    
     pc.addTrack(audio_player)
 
     @pc.on("connectionstatechange")
@@ -444,6 +429,9 @@ async def offer(request: web.Request) -> web.Response:
         
         if pc.connectionState in ['closed', 'failed', 'disconnected']:
             # Cancel all tasks
+            if hasattr(pc, '_stop_event'):
+                pc._stop_event.set()
+            
             tasks = []
             for attr in ['_asr_task', '_llm_task', '_tts_task']:
                 if hasattr(pc, attr):
@@ -457,7 +445,7 @@ async def offer(request: web.Request) -> web.Response:
             
             await pc.close()
             pcs.discard(pc)
-            print(f"{pc_id}: Connection closed and cleaned up")
+            print(f"{pc_id}: Connection cleaned up")
 
     @pc.on("track")
     async def on_track(track):
@@ -465,37 +453,43 @@ async def offer(request: web.Request) -> web.Response:
         
         if track.kind == "audio":
             recorder.addTrack(track)
-            # Create stop event
+            
+            # Create control events
             stop_event = asyncio.Event()
-            pc._stop_event = stop_event
             interrupt_event = asyncio.Event()
+            pc._stop_event = stop_event
             pc._interrupt_event = interrupt_event
+            
             try:
-                print(f"{pc_id}: Starting ASR")
-                text = await google_asr(track, stop_event, interrupt_event, asr_queue)
-                
-                if not text or text.strip() == "":
-                    print(f"{pc_id}: Empty ASR result")
-                    await audio_queue.put(None)
-                    return
-                
-                print(f"{pc_id}: ASR result: '{text}'")
-                
-                # Start pipeline tasks of LLM and TTS
+                # Start  pipeline
+                pc._asr_task = asyncio.create_task(
+                    google_asr(
+                        track, stop_event, interrupt_event, 
+                        asr_queue, audio_player, vad=_vad
+                    )
+                )
+
                 pc._llm_task = asyncio.create_task(
-                    llm_generator(asr_queue, llm_queue, llm_client, SYSTEM_PROMPT, MAX_TOKENS, stop_event, interrupt_event)
-                )
-                pc._tts_task = asyncio.create_task(
-                    online_tts(llm_queue, audio_queue)
+                    llm_generator(
+                        asr_queue, llm_queue, llm_client, 
+                        SYSTEM_PROMPT, MAX_TOKENS, 
+                        stop_event, interrupt_event
+                    )
                 )
                 
-                print(f"{pc_id}: Pipeline started")
+                pc._tts_task = asyncio.create_task(
+                    tts_pipeline(
+                        llm_queue, audio_queue, 
+                        stop_event, interrupt_event
+                    )
+                )
+                
+                print(f"{pc_id}:  pipeline started")
                 
             except Exception as e:
                 print(f"{pc_id}: Pipeline error: {e}")
+                import traceback
                 traceback.print_exc()
-                await llm_queue.put(None)
-                await audio_queue.put(None)
 
         @track.on("ended")
         async def on_ended():
@@ -515,6 +509,7 @@ async def offer(request: web.Request) -> web.Response:
         content_type="application/json",
         text=json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
     )
+    
 async def on_shutdown(app: web.Application) -> None:
     """
     Handle the shutdown of the application.
@@ -584,6 +579,7 @@ async def google_asr(
     stop_event: asyncio.Event, 
     interrupt_event: asyncio.Event,
     output_queue: asyncio.Queue,
+    audio_player: AudioPlayer,
     vad=None,
     vad_threshold=VAD_THRESHOLD,
     sample_rate=ASR_SAMPLE_RATE,
@@ -592,83 +588,92 @@ async def google_asr(
     timeout=TIMEOUT,
 ) -> None:
     """
-    Perform ASR transcription on the audio track.
-    Args:
-        track (AudioStreamTrack): The audio track to transcribe.
-        stop_event (asyncio.Event): Event to signal when to stop transcription.
-    Returns:
-        str: Transcription result.
-    Raises:
-        Exception: If an error occurs during transcription.
-        MediaStreamError: If the media stream is interrupted by the user.
+     ASR with proper interruption handling.
     """
     try:
+        resampler = AudioResampler(rate=sample_rate, layout='mono', format='s16')
+        
         while not stop_event.is_set():
             frame = await asyncio.wait_for(track.recv(), timeout=timeout)
             frame = resampler.resample(frame)[0].to_ndarray()
             frame = np.squeeze(frame, axis=0).astype(np.int16)
-            audio_bytes = frame.tobytes()
-            if (not vad) or (vad(frame) > vad_threshold):
-                # Once connection established and recieves the first dummy frame, start the ASR thread
-                print('='*50)
-                print("Start recording audio")
-                print('='*50)
-        # pass the incoming track into the AudioStream
+            
+            # Check for speech with  VAD
+            if not vad or vad.is_speech(frame):
+                # IMMEDIATELY interrupt audio playback when speech detected
+                audio_player.request_interrupt()
+                interrupt_event.set()
+                
+                print("ASR: Speech detected - starting transcription")
+                
+                # Set up streaming recognition
                 audio_queue = queue.Queue()
                 session_output_queue = queue.Queue(maxsize=1)
-                # retrieve the transcription result from the asr_thread
+                
                 audio_stream = AudioStream(
                     audio_queue, 
                     rate=sample_rate, 
-                    chunk_size=chunk_size, 
-                    language_code=language_code,
+                    chunk_size=chunk_size,
+                    language_code=language_code
                 )
+
+                audio_bytes = frame.tobytes()
+                audio_queue.put(audio_bytes)
+
                 def run_google_stream():
-                    """
-                    Run the Google ASR streaming transcription in a separate thread.
-                    """
-                    with audio_stream:
-                        requests = (
-                            speech.StreamingRecognizeRequest(audio_content=content)
-                            for content in audio_stream.generate()
-                        )
-                        responses = google_asr_client.streaming_recognize(
-                            google_asr_streaming_config, 
-                            requests,
-                        )
-                        transcript = listen_print_loop(responses, audio_stream)
-                    session_output_queue.put(transcript)
+                    """Run Google ASR in separate thread."""
+                    try:
+                        with audio_stream:
+                            requests = (
+                                speech.StreamingRecognizeRequest(audio_content=content)
+                                for content in audio_stream.generate()
+                            )
+                            responses = google_asr_client.streaming_recognize(
+                                google_asr_streaming_config, 
+                                requests,
+                            )
+                            transcript = listen_print_loop(responses, audio_stream)
+                        session_output_queue.put(transcript)
+                    except Exception as e:
+                        print(f"ASR thread error: {e}")
+                        session_output_queue.put(None)
+                
                 asr_thread = threading.Thread(target=run_google_stream, daemon=True)
                 asr_thread.start()
+                
+                # Continue collecting audio until speech ends
                 while True:
-                    if stop_event.is_set():
+                    try:
+                        if stop_event.is_set():
+                            audio_stream.closed = True
+                            await output_queue.put(None)
+                            asr_thread.join(timeout=0)
+                            break
+                        if audio_stream.last_transcript_was_final:
+                            audio_stream.closed = True
+                            asr_thread.join(timeout=5)
+                            transcript = session_output_queue.get_nowait() if not session_output_queue.empty() else None
+                            await output_queue.put(transcript)
+                            interrupt_event.clear()
+                            break         
+                        frame = await asyncio.wait_for(track.recv(), timeout=1.0)
+                        frame = resampler.resample(frame)[0].to_ndarray()
+                        frame = np.squeeze(frame, axis=0).astype(np.int16)
+                        audio_bytes = frame.tobytes()
+                        audio_queue.put(audio_bytes)
+                            
+                    except asyncio.TimeoutError:
+                        print("ASR: Timeout waiting for more audio")
                         audio_stream.closed = True
-                        await output_queue.put(None)
-                        asr_thread.join(timeout=0)
                         break
-                    if audio_stream.last_transcript_was_final:
-                        audio_stream.closed = True
-                        interrupt_event.clear()
-                        asr_thread.join(timeout=5)
-                        transcript = session_output_queue.get_nowait() if not session_output_queue.empty() else None
-                        await output_queue.put(transcript)
-                        break
-                    if audio_stream.is_speaking:
-                        # If the user is speaking, continue to receive audio frames
-                        interrupt_event.set()
-                    # Continuously receive audio frames from the track
-                    frame = await track.recv()
-                    frame = resampler.resample(frame)[0].to_ndarray()
-                    frame = np.squeeze(frame, axis=0).astype(np.int16)
-                    audio_bytes = frame.tobytes()
-                    audio_queue.put(audio_bytes)
     except asyncio.TimeoutError:
-        logger.info(f"User stops speaking for {timeout} seconds, ending ASR session")
-    except MediaStreamError:
-        logger.info("User stopped recording")      
+        print(f"ASR: User inactive for {timeout} seconds")
     except Exception as e:
-        logger.error(f"Error during ASR transcription: {type(e).__name__}: {e}")
+        print(f"ASR: Error: {e}")
+        import traceback
         traceback.print_exc()
+    finally:
+        await output_queue.put(None)
 
 async def llm_generator(
     input_queue: asyncio.Queue, 
@@ -783,7 +788,9 @@ async def llm_generator(
 async def local_tts(
     input_queue: asyncio.Queue, 
     output_queue: asyncio.Queue, 
-    tts_model: object
+    tts_model: object,
+    stop_event: asyncio.Event = None,
+    interrupt_event: asyncio.Event = None,
     ) -> None:
     """
     TTS model that runs locally, transcribing text in to speech with predefined model.
@@ -803,17 +810,27 @@ async def local_tts(
     try:
         text_buffer = ""
         
-        while True:
+        while not stop_event.is_set():
             try:
                 # Get text from LLM
-                text = await asyncio.wait_for(input_queue.get(), timeout=30.0)
+                text = await asyncio.wait_for(input_queue.get(), timeout=TIMEOUT)
+                print(f"TTS received text: {text}")
+                if interrupt_event.is_set():
+                    print("TTS: Interrupt event set, stopping transcription")
+                    await output_queue.put(None)
+                    break
                 
+                if stop_event.is_set():
+                    print("TTS: Stop event set, stopping transcription")
+                    await output_queue.put(None)
+                    continue
+
                 if text is None:
                     print("TTS: End of input")
                     # Process any remaining buffered text
                     if text_buffer.strip():
                         await process_text_chunk(text_buffer, output_queue, tts_model)
-                    break
+                    continue
                 
                 # Add to buffer
                 text_buffer += text
@@ -832,7 +849,12 @@ async def local_tts(
                 for sentence in sentences:
                     if not sentence.strip():
                         continue
-                    
+                    if stop_event.is_set():
+                        print("TTS: Stop event set, skipping sentence")
+                        break
+                    if interrupt_event.is_set():
+                        print("TTS: Interrupt event set, skipping sentence")
+                        break
                     samples = await process_text_chunk(sentence, output_queue, tts_model)
                     total_samples_generated += samples
                     
@@ -915,252 +937,207 @@ async def process_text_chunk(text: str, output_queue: asyncio.Queue, tts_model: 
         print(f"TTS: Error processing chunk '{text[:30]}...': {e}")
         return 0
 
-async def online_tts(
+async def tts_pipeline(
     input_queue: asyncio.Queue, 
     output_queue: asyncio.Queue,
     stop_event: asyncio.Event,
     interrupt_event: asyncio.Event,
-    timeout=TIMEOUT
-    ) -> None:
+    timeout=30
+) -> None:
     """
-    Optimized TTS that truly streams audio as it's generated.
-    
-    Key optimizations:
-    1. True streaming - output audio as soon as chunks arrive
-    2. Minimal buffering - reduce latency
-    3. Overlap processing - start next TTS while current one streams
-    4. Adaptive sentence splitting for better responsiveness
+     TTS pipeline with proper interruption handling.
     """
-    total_samples_generated = 0
-    sentence_count = 0
-    
     try:
         text_buffer = ""
-        current_tts_task = None
+        current_sentence_id = 0
         
         while not stop_event.is_set():
             try:
                 # Get text from LLM
                 text_chunk = await asyncio.wait_for(input_queue.get(), timeout=timeout)
                 
-                if text_chunk is None:
-                    print("TTS: End of input from LLM")
-                    # Wait for current TTS to finish
-                    if current_tts_task and not current_tts_task.done():
-                        await current_tts_task
-                    
-                    # Process any remaining text
-                    if text_buffer.strip():
-                        sentence_count += 1
-                        samples = await process_streaming_tts(
-                            text_buffer.strip(), output_queue, sentence_count
-                        )
-                        total_samples_generated += samples
+                if stop_event.is_set():
+                    print("TTS: Stopping")
+                    break
+                
+                if interrupt_event.is_set():
+                    print("TTS: Interrupted, clearing buffer")
+                    text_buffer = ""
+                    # Clear output queue
+                    try:
+                        while True:
+                            output_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
                     continue
                 
-                print(f"TTS: Received text chunk: '{text_chunk[:50]}...'")
+                if text_chunk is None:
+                    print("TTS: End of input")
+                    # Process remaining buffer
+                    if text_buffer.strip():
+                        current_sentence_id += 1
+                        await process_text_with_interruption(
+                            text_buffer.strip(), 
+                            output_queue, 
+                            stop_event,
+                            interrupt_event, 
+                            current_sentence_id
+                        )
+                    break
+                
                 text_buffer += text_chunk
                 
-                # Use more aggressive sentence splitting for lower latency
-                sentences, text_buffer = extract_sentences_aggressive(text_buffer)
+                # Extract complete sentences
+                sentences, text_buffer = extract_complete_sentences(text_buffer)
                 
                 for sentence in sentences:
+                    if stop_event.is_set() or interrupt_event.is_set():
+                        print("TTS: Interrupted during sentence processing")
+                        break
+                    
                     if sentence.strip():
-                        sentence_count += 1
-                        
-                        # Wait for previous TTS to finish before starting new one
-                        # This prevents overwhelming the API while maintaining order
-                        if current_tts_task and not current_tts_task.done():
-                            await current_tts_task
-                        
-                        # Start new streaming TTS
-                        current_tts_task = asyncio.create_task(
-                            process_streaming_tts(sentence.strip(), output_queue, sentence_count)
+                        current_sentence_id += 1
+                        await process_text_with_interruption(
+                            sentence.strip(), 
+                            output_queue, 
+                            stop_event,
+                            interrupt_event, 
+                            current_sentence_id
                         )
-                        
-                        # For the first sentence, wait a bit to get audio flowing
-                        if sentence_count == 1:
-                            # Give it a small head start but don't wait for completion
-                            try:
-                                await asyncio.wait_for(asyncio.shield(current_tts_task), timeout=0.5)
-                            except asyncio.TimeoutError:
-                                pass  # Continue processing, audio will stream in background
-                        
-                        samples = await current_tts_task
-                        total_samples_generated += samples
                 
             except asyncio.TimeoutError:
                 print("TTS: Timeout waiting for input")
                 break
             except Exception as e:
-                print(f"TTS: Error processing text: {e}")
-                import traceback
-                traceback.print_exc()
-                continue
-        
-        print(f"TTS: Completed - {sentence_count} sentences, {total_samples_generated} samples")
-        
+                print(f"TTS: Error: {e}")
+                break
+    
     finally:
         await output_queue.put(None)
-        print("TTS: Sent end marker")
+        print("TTS: Pipeline ended")
 
 
-async def process_streaming_tts(sentence: str, output_queue: asyncio.Queue, sentence_id: int) -> int:
+async def process_text_with_interruption(
+    text: str, 
+    output_queue: asyncio.Queue, 
+    stop_event: asyncio.Event,
+    interrupt_event: asyncio.Event, 
+    sentence_id: int
+) -> None:
     """
-    Process TTS with true streaming - output audio chunks as they arrive.
-    
-    This eliminates the 5-second delay by streaming audio immediately.
+    Process TTS text with interruption checking.
     """
-    if not sentence.strip():
-        return 0
+    if stop_event.is_set() or interrupt_event.is_set():
+        print(f"TTS: Sentence {sentence_id} skipped due to interruption")
+        return
     
-    start_time = time.time()
-    total_samples = 0
-    first_chunk_time = None
+    print(f"TTS: Processing sentence {sentence_id}: '{text[:50]}...'")
     
     try:
-        print(f"TTS: Starting streaming TTS for sentence {sentence_id}: '{sentence[:50]}...'")
-        
-        # Create the streaming request
+        # Create streaming request
         def request_generator():
             yield google_tts_config_request
             yield texttospeech.StreamingSynthesizeRequest(
-                input=texttospeech.StreamingSynthesisInput(text=sentence)
+                input=texttospeech.StreamingSynthesisInput(text=text)
             )
         
-        # Use a thread-safe queue to get audio chunks as they arrive
+        # Process TTS with interruption checking
+        import queue
         audio_chunk_queue = queue.Queue()
-        error_container = [None]
         
         def run_streaming_tts():
-            """Run TTS in thread and put chunks in queue as they arrive"""
             try:
                 streaming_responses = google_tts_client.streaming_synthesize(request_generator())
-                
-                # Process each response immediately (TRUE STREAMING)
                 for response in streaming_responses:
+                    if interrupt_event.is_set():
+                        print(f"TTS: Sentence {sentence_id} interrupted during generation")
+                        break
                     if response.audio_content:
                         audio_chunk_queue.put(('audio', response.audio_content))
-                
                 audio_chunk_queue.put(('done', None))
-                
             except Exception as e:
-                error_container[0] = e
                 audio_chunk_queue.put(('error', str(e)))
         
-        # Start TTS in background thread
+        import threading
         tts_thread = threading.Thread(target=run_streaming_tts, daemon=True)
         tts_thread.start()
         
-        # Process audio chunks as they arrive
-        while True:
+        # Process audio chunks with interruption checking
+        while not interrupt_event.is_set():
             try:
-                # Wait for next audio chunk (with timeout)
-                chunk_type, chunk_data = audio_chunk_queue.get(timeout=10.0)
+                chunk_type, chunk_data = audio_chunk_queue.get(timeout=5.0)
                 
-                if chunk_type == 'error':
+                if chunk_type == 'done':
+                    break
+                elif chunk_type == 'error':
                     print(f"TTS: Error in sentence {sentence_id}: {chunk_data}")
                     break
-                elif chunk_type == 'done':
-                    print(f"TTS: Streaming complete for sentence {sentence_id}")
-                    break
                 elif chunk_type == 'audio':
-                    # Process and send audio chunk immediately
-                    audio_np = np.frombuffer(chunk_data, dtype=np.int16)
+                    if interrupt_event.is_set():
+                        print(f"TTS: Sentence {sentence_id} interrupted during audio processing")
+                        break
                     
+                    audio_np = np.frombuffer(chunk_data, dtype=np.int16)
                     if len(audio_np) > 0:
-                        # Apply improvements
-                        audio_np = apply_audio_improvements(audio_np)
-                        total_samples += len(audio_np)
-                        
-                        # Send immediately in optimized chunks
-                        await send_audio_immediately(audio_np, output_queue)
-                        
-                        # Track first chunk timing
-                        if first_chunk_time is None:
-                            first_chunk_time = time.time()
-                            latency = first_chunk_time - start_time
-                            print(f"TTS: First audio chunk for sentence {sentence_id} in {latency:.3f}s")
+                        await send_audio_chunks(audio_np, output_queue, interrupt_event)
                 
             except queue.Empty:
-                print(f"TTS: Timeout waiting for audio chunk in sentence {sentence_id}")
+                print(f"TTS: Timeout waiting for audio in sentence {sentence_id}")
                 break
         
-        processing_time = time.time() - start_time
-        print(f"TTS: Sentence {sentence_id} completed in {processing_time:.2f}s, {total_samples} samples")
-        
-        return total_samples
-        
+        if interrupt_event.is_set():
+            print(f"TTS: Sentence {sentence_id} was interrupted")
+        else:
+            print(f"TTS: Sentence {sentence_id} completed")
+            
     except Exception as e:
-        print(f"TTS: Error in streaming TTS for sentence {sentence_id}: {e}")
-        import traceback
-        traceback.print_exc()
-        return 0
+        print(f"TTS: Error processing sentence {sentence_id}: {e}")
 
 
-async def send_audio_immediately(audio_np: np.ndarray, output_queue: asyncio.Queue):
-    """Send audio chunks immediately without waiting for complete sentence."""
-    if len(audio_np) == 0:
-        return
-    
-    # Use smaller chunks for lower latency
-    chunk_size = SAMPLES_PER_FRAME * 5  # 50ms chunks instead of 100ms
+async def send_audio_chunks(audio_np: np.ndarray, output_queue: asyncio.Queue, interrupt_event: asyncio.Event):
+    """Send audio chunks with interruption checking."""
+    chunk_size = 240  # 10ms chunks at 24kHz
     
     for i in range(0, len(audio_np), chunk_size):
-        chunk = audio_np[i:min(i + chunk_size, len(audio_np))]
+        if interrupt_event.is_set():
+            break
         
-        # Pad if necessary
-        if len(chunk) < SAMPLES_PER_FRAME:
-            chunk = np.pad(chunk, (0, SAMPLES_PER_FRAME - len(chunk)), 'constant')
+        chunk = audio_np[i:min(i + chunk_size, len(audio_np))]
+        if len(chunk) < chunk_size:
+            # Pad last chunk
+            chunk = np.pad(chunk, (0, chunk_size - len(chunk)), 'constant')
         
         await output_queue.put(chunk)
-        
-        # Minimal delay to prevent overwhelming
-        await asyncio.sleep(0.001)
+        await asyncio.sleep(0.001)  # Small delay to prevent overwhelming
 
 
-def extract_sentences_aggressive(text_buffer: str) -> tuple:
-    """
-    More aggressive sentence extraction for lower latency.
-    
-    Splits on commas and other punctuation, not just sentence endings.
-    This allows audio to start playing sooner.
-    """
-    if not text_buffer.strip():
-        return [], ""
-    
+def extract_complete_sentences(text: str) -> tuple:
+    """Extract complete sentences for processing."""
     import re
     
-    sentences = []
+    # Split on sentence endings
+    sentences = re.split(r'([.!?。！？]+)', text)
     
-    # Split on various punctuation for more responsive streaming
-    # Include commas, semicolons, and other natural pause points
-    parts = re.split(r'([.!?。！？，,；;：:]+)', text_buffer)
+    complete_sentences = []
+    remaining = ""
     
-    current_sentence = ""
     i = 0
-    
-    while i < len(parts) - 1:
-        current_sentence += parts[i]
-        
-        if i + 1 < len(parts) and re.match(r'[.!?。！？，,；;：:]+', parts[i + 1]):
-            current_sentence += parts[i + 1]
-            
-            # Only create sentence if it's long enough to be worth processing
-            if len(current_sentence.strip()) > 10:  # Minimum 10 characters
-                sentences.append(current_sentence.strip())
-                current_sentence = ""
-            
+    while i < len(sentences) - 1:
+        sentence = sentences[i]
+        if i + 1 < len(sentences) and re.match(r'[.!?。！？]+', sentences[i + 1]):
+            sentence += sentences[i + 1]
+            if sentence.strip():
+                complete_sentences.append(sentence.strip())
             i += 2
         else:
+            remaining += sentence
             i += 1
     
-    # Handle remaining text
-    remaining_parts = parts[i:]
-    remaining = current_sentence + ''.join(remaining_parts)
+    # Add any remaining parts
+    if i < len(sentences):
+        remaining += sentences[i]
     
-    print(f"TTS: Aggressive split - {len(sentences)} chunks, remaining: '{remaining[:30]}...'")
-    return sentences, remaining.strip()
+    return complete_sentences, remaining
 
 def apply_audio_improvements(audio_np: np.ndarray) -> np.ndarray:
     """Apply basic audio improvements."""
