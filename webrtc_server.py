@@ -27,10 +27,6 @@ pcs = set()
 #     config=config, interim_results=True
 # )
 
-# Queues to streamingly store LLM output and TTS audio output
-llm_tts_queue = asyncio.Queue()
-tts_output_queue = asyncio.Queue()
-
 # Google Cloud clients for ASR (online)
 google_asr_client = speech.SpeechClient()
 google_asr_config = speech.RecognitionConfig(
@@ -69,19 +65,28 @@ llm_start_time = 0
 tts_first_chunk_time = 0
 tts_start_time = 0
 
-
-# p = pa.PyAudio()
-# stream = p.open(format=pa.paInt16, channels=1, rate=AUDIO_SAMPLE_RATE, output=True)
-
-class VAD:
+class MultiFrameVAD:
     """
-     Voice Activity Detection with better speech detection.
+    Voice Activity Detection with multiple frames. More robust against noise.
+    Not advised to use this VAD, as it may swallow first several frames. 
+    You may adjust you own VAD if you want.
     """
     def __init__(self, threshold=VAD_THRESHOLD, speech_frames_required=3):
+        """
+        Initialize MultiFrameVAD instance
+        Args:
+            self: The instance of the class.
+            threshold: The energy threshold for detecting speech.
+                       In general, noise < 2000 while speech > 20000.
+                       Maybe adjusted based on the noise level of the environment.
+            speech_frames_required: The number of consecutive frames required to confirm speech.
+        """
         self.threshold = threshold
         self.speech_frames_required = speech_frames_required
         self.speech_frame_count = 0
         self.is_currently_speaking = False
+        # store the previous frames and prevent them from being swallowed if they
+        # are meaningful speeches.
         self.frames = [None for i in range(speech_frames_required)]
         
     def populate(self, frame:np.ndarray) -> None:
@@ -98,6 +103,10 @@ class VAD:
     def is_speech(self, frame: np.ndarray) -> bool:
         """
         Detect if frame contains speech with hysteresis to avoid false positives.
+        Args:
+            frame (np.ndarray): The audio frame to analyze.
+        Returns:
+            bool: True if speech is detected, False otherwise.
         """
         # Calculate RMS energy
         if len(frame) == 0:
@@ -118,14 +127,27 @@ class VAD:
 
 class SimpleVAD:
     """
-    A simple Voice Activity Detection (VAD) class.
+    A simple Voice Activity Detection (VAD) class 
+    that only measures the energy of a single audio frame.
     """
     def __init__(self, threshold=VAD_THRESHOLD):
+        """
+        Initialize SimpleVAD instance.
+        Args:
+            self: The instance of the class.
+            threshold: The energy threshold for detecting speech.
+                       In general, noise < 2000 while speech > 20000.
+                       Maybe adjusted based on the noise level of the environment.
+        """
         self.threshold = threshold
 
     def is_speech(self, frame: np.ndarray) -> bool:
         """
         Detect if frame contains speech.
+        Args:
+            frame (np.ndarray): The audio frame to analyze.
+        Returns:
+            bool: True if speech is detected, False otherwise.
         """
         if len(frame) == 0:
             return False
@@ -134,7 +156,10 @@ class SimpleVAD:
         return rms_energy > self.threshold
 
 class AudioPrinterTrack(AudioStreamTrack):
-    """ A track that prints audio data received from the remote peer. """
+    """ 
+    A track that prints audio data received from the remote peer. 
+    Debug only.
+    """
     kind = "audio"
     def __init__(self: object, track: AudioStreamTrack) -> None:
         """ 
@@ -164,18 +189,18 @@ class AudioPrinterTrack(AudioStreamTrack):
 
 class AudioPlayer(AudioStreamTrack):
     """
-     AudioPlayer with proper interruption support and buffer management.
+    AudioPlayer instance that passes results of TTS (asyncio queue) to the WebRTC peer 
+    with proper interruption support and buffer management.
     """
     kind = "audio"
-    
-    def __init__(self, audio_queue: asyncio.Queue, sample_rate: int = 24000) -> None:
+    def __init__(self, audio_queue: asyncio.Queue, sample_rate: int = AUDIO_SAMPLE_RATE) -> None:
         super().__init__()
         self.audio_queue = audio_queue
         self.sample_rate = sample_rate
         self._timestamp = 0
-        self.samples_per_frame = sample_rate // 100  # 10ms frames
+        self.samples_per_frame = sample_rate // 100
         
-        # Simplified buffer management
+        # buffer management
         self._audio_buffer = deque()
         self._max_buffer_ms = 500  # Maximum 500ms of audio buffered
         self._max_buffer_samples = (self._max_buffer_ms * sample_rate) // 1000
@@ -192,7 +217,13 @@ class AudioPlayer(AudioStreamTrack):
         print(f"AudioPlayer: Initialized with {self._max_buffer_ms}ms max buffer")
 
     async def recv(self) -> AudioFrame:
-        """Generate audio frames with proper interruption support."""
+        """
+        Send audio frames to the WebRTC peer.
+        Args:
+            self: The class instance.
+        Returns:
+            AudioFrame: The generated audio frame.
+        """
         await self._control_timing()
         
         # Handle interruption immediately
@@ -220,18 +251,19 @@ class AudioPlayer(AudioStreamTrack):
                 self._is_playing = False
         
         # Create and return frame
-        frame = AudioFrame.from_ndarray(audio_array, format='s16', layout='mono')
+        frame = AudioFrame.from_ndarray(audio_array, format=FORMAT, layout=LAYOUT)
         frame.sample_rate = self.sample_rate
         frame.time_base = Fraction(1, self.sample_rate)
         frame.pts = self._timestamp
         
         self._timestamp += self.samples_per_frame
         self._frames_sent += 1
-        
         return frame
     
     async def _control_timing(self):
-        """Control frame timing for consistent 10ms intervals."""
+        """
+        Control frame timing for consistent 10ms intervals.
+        """
         current_time = time.time()
         elapsed = current_time - self._last_frame_time
         
@@ -272,9 +304,7 @@ class AudioPlayer(AudioStreamTrack):
                 if len(samples_to_add) > available_space:
                     dropped = len(samples_to_add) - available_space
                     print(f"AudioPlayer: Dropped {dropped} samples due to buffer overflow")
-            
         except asyncio.QueueEmpty:
-            # No audio available, continue
             pass
     
     def request_interrupt(self):
@@ -354,8 +384,8 @@ class TestToneGenerator(AudioStreamTrack):
             frame.time_base = Fraction(1, self.sample_rate)
             frame.pts = self._timestamp
             self._timestamp += self.samples_per_frame
-            print(type(frame), frame.sample_rate, frame.time_base, frame.pts, frame)
             return frame
+        
         except asyncio.QueueEmpty:
             # If queue is empty, return a silence frame
             return self._create_silence_frame()
@@ -400,9 +430,10 @@ async def javascript(request: web.Request) -> web.Response:
 
 async def offer(request: web.Request) -> web.Response:
     """
-    Offer handler with proper interruption support.
+    Manage WebRTC connection.
     """
-    params = await request.json()
+    params = await request.json() 
+    # located in js
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
     pc = RTCPeerConnection()
@@ -412,14 +443,17 @@ async def offer(request: web.Request) -> web.Response:
     print(f"{pc_id}: New connection established")
 
     # Create session-specific queues
+    # asr_queue: transfer results of ASR to LLM
+    # llm_queue: transfer results of LLM to TTS
+    # audio_queue: transfer audio data from TTS to WebRTC browser player
     asr_queue = asyncio.Queue(maxsize=20)
     llm_queue = asyncio.Queue(maxsize=20)
-    audio_queue = asyncio.Queue(maxsize=100)  # Smaller queue for better responsiveness
+    audio_queue = asyncio.Queue(maxsize=100)
     
-    # Create  components
+    # Create components
     recorder = MediaBlackhole()
-    audio_player = AudioPlayer(audio_queue, sample_rate=24000)
-    _vad = SimpleVAD()
+    audio_player = AudioPlayer(audio_queue)
+    vad = SimpleVAD()
     
     pc.addTrack(audio_player)
 
@@ -453,34 +487,49 @@ async def offer(request: web.Request) -> web.Response:
         
         if track.kind == "audio":
             recorder.addTrack(track)
-            
-            # Create control events
+
+            # Create control events to stop or interrupt connection
             stop_event = asyncio.Event()
             interrupt_event = asyncio.Event()
             pc._stop_event = stop_event
             pc._interrupt_event = interrupt_event
             
             try:
-                # Start  pipeline
                 pc._asr_task = asyncio.create_task(
                     google_asr(
-                        track, stop_event, interrupt_event, 
-                        asr_queue, audio_player, vad=_vad
+                        track, 
+                        asr_queue, 
+                        audio_player, 
+                        stop_event, 
+                        interrupt_event, 
+                        vad=vad,
+                        sample_rate=ASR_SAMPLE_RATE,
+                        chunk_size=ASR_CHUNK_SIZE,
+                        language_code=ASR_LANGUAGE,
+                        timeout=TIMEOUT,
                     )
                 )
 
                 pc._llm_task = asyncio.create_task(
-                    llm_generator(
-                        asr_queue, llm_queue, llm_client, 
-                        SYSTEM_PROMPT, MAX_TOKENS, 
-                        stop_event, interrupt_event
+                    baidu_llm(
+                        asr_queue, 
+                        llm_queue, 
+                        llm_client, 
+                        stop_event, 
+                        interrupt_event, 
+                        system=SYSTEM_PROMPT, 
+                        max_tokens=MAX_TOKENS, 
+                        timeout=TIMEOUT,
                     )
                 )
                 
                 pc._tts_task = asyncio.create_task(
-                    tts_pipeline(
-                        llm_queue, audio_queue, 
-                        stop_event, interrupt_event
+                    azure_tts(
+                        llm_queue, 
+                        audio_queue, 
+                        stop_event, 
+                        interrupt_event,
+                        timeout=TIMEOUT,
                     )
                 )
                 
@@ -576,40 +625,65 @@ async def local_asr(track: AudioStreamTrack, stop_event: asyncio.Event = None) -
 
 async def google_asr(
     track: AudioStreamTrack, 
-    stop_event: asyncio.Event, 
-    interrupt_event: asyncio.Event,
     output_queue: asyncio.Queue,
     audio_player: AudioPlayer,
+    stop_event: asyncio.Event, 
+    interrupt_event: asyncio.Event,
     vad=None,
-    vad_threshold=VAD_THRESHOLD,
-    sample_rate=ASR_SAMPLE_RATE,
-    chunk_size=ASR_CHUNK_SIZE,
-    language_code=ASR_LANGUAGE,
-    timeout=TIMEOUT,
+    sample_rate: int = ASR_SAMPLE_RATE,
+    chunk_size: int = ASR_CHUNK_SIZE,
+    language_code: str = ASR_LANGUAGE,
+    timeout: float = TIMEOUT,
 ) -> None:
     """
-     ASR with proper interruption handling.
+    Google ASR transcription
+    Args:
+        track (AudioStreamTrack): Received audio track from WebRTC.
+        output_queue (asyncio.Queue): Queue to send transcription results to LLM.
+        audio_player (AudioPlayer): Audio player instance for controlling playback, 
+                                    mainly to enable interruption.
+        stop_event (asyncio.Event): Event to signal when to stop connection 
+                                    and terminate the program.
+        interrupt_event (asyncio.Event): Event to signal when to interrupt other tasks or processes
+                                         as the user interrupts the current audio playback.
+        vad (optional): Voice activity detector instance for detecting speech. This VAD instance
+                        can be customized on your own, but it must contain a is_speech(frame) 
+                        method that returns a boolean given a np.ndarray frame,
+                        distinguishing between speech and silence. If not provided, defaults to None,
+                        and every frame will be passed through ASR.
+        sample_rate (int, optional): Sample rate for ASR. Defaults to 16000.
+        chunk_size (int, optional): Chunk size for audio processing. Defaults to 512.
+        language_code (str, optional): Language code for ASR. Defaults to 'zh-CN'.
+                                       Please refer to constants.py to check for the available
+                                       language codes.
+        timeout (float, optional): Timeout for ASR. Defaults to 600 seconds
+    Returns:
+        None    
+    Raises:
+        TimeoutError: If the operation times out.
     """
     try:
-        resampler = AudioResampler(rate=sample_rate, layout='mono', format='s16')
-        
         while not stop_event.is_set():
             frame = await asyncio.wait_for(track.recv(), timeout=timeout)
             frame = resampler.resample(frame)[0].to_ndarray()
             frame = np.squeeze(frame, axis=0).astype(np.int16)
             
-            # Check for speech with  VAD
+            # Check for speech with VAD
             if not vad or vad.is_speech(frame):
-                # IMMEDIATELY interrupt audio playback when speech detected
                 audio_player.request_interrupt()
                 interrupt_event.set()
                 
                 print("ASR: Speech detected - starting transcription")
                 
-                # Set up streaming recognition
+                # queue that contains pcm data, feed into google STT API
+                # wrapped in AudioStream instance
                 audio_queue = queue.Queue()
+                
+                # queue that connects inner STT transcription thread with the main thread
+                # that receives audio from WebRTC
                 session_output_queue = queue.Queue(maxsize=1)
                 
+                # Google API instance
                 audio_stream = AudioStream(
                     audio_queue, 
                     rate=sample_rate, 
@@ -675,24 +749,27 @@ async def google_asr(
     finally:
         await output_queue.put(None)
 
-async def llm_generator(
+async def baidu_llm(
     input_queue: asyncio.Queue, 
     output_queue: asyncio.Queue, 
     llm_client: object, 
-    system_prompt=None, 
-    max_tokens=512,
-    stop_event: asyncio.Event=None,
-    interrupt_event: asyncio.Event=None,
+    stop_event: asyncio.Event,
+    interrupt_event: asyncio.Event,
+    system=SYSTEM_PROMPT, 
+    max_tokens=MAX_TOKENS,
     timeout=TIMEOUT,
     ) -> None:
     """
     LLM that generates texts based on the incoming trancribed message of the user
     Args:
-        text (str): The input text to generate a response for, also known as the user input
-        output_queue (asyncio.Queue): The queue to send the generated response to
-        llm_client (object): The LLM client to use for generating responses
-        system_prompt (str, optional): The system prompt to use for the LLM, defaults to None
-        max_tokens (int, optional): The maximum number of tokens to generate, defaults to 512
+        input_queue (asyncio.Queue): The queue to receive user input from ASR.
+        output_queue (asyncio.Queue): The queue to send the generated response to TTS.
+        llm_client (object): The LLM client to use for generating responses.
+        stop_event (asyncio.Event): Event to signal when to stop the program.
+        interrupt_event (asyncio.Event): Event to signal when to interrupt the current LLM generation.
+        system (str, optional): The system prompt to use for the LLM, defaults to None.
+        max_tokens (int, optional): The maximum number of tokens to generate, defaults to 512.
+        timeout (float, optional): The timeout for the LLM request, defaults to 600 seconds.
     Returns:
         None
     Raises:
@@ -708,11 +785,9 @@ async def llm_generator(
                 await output_queue.put(None)
                 return 
             print(f"LLM: Generating response for: '{text}'")
-            llm_start_time = time.time()
-                # Stream the response
             chat_completion = llm_client.generate(
                 users=texts,
-                system=system_prompt,
+                system=system,
                 assistants=assistants,
                 max_tokens=max_tokens,
             )
@@ -722,13 +797,6 @@ async def llm_generator(
             for chunk in chat_completion:
                 response = chunk.choices[0].delta.content
                 total_response += response
-                # if init:
-                #     init_text = response[:10] if len(response) > 10 else response
-                #     await output_queue.put(init_text)
-                #     response = response[10:] if len(response) > 10 else ""
-                #     init = False
-                    
-                #print(response, end='', flush=True)
                 prev = 0
                 # split each response based on common puntuations.
                 # Strip the uncommon symbols for each chunk.
@@ -739,8 +807,9 @@ async def llm_generator(
                     if interrupt_event.is_set():
                         await output_queue.put(None)
                         break
-                    # skip newlines
-                    if char != '\n':
+                    # skip any other characters
+                    # Try some packages like NLTK for better punctuation handling...
+                    if not (char == '\n' or char == ' ' or char == '\t' or char == '*' or char == '-'):
                         if char in ['。', '，', '！', '？', '.', ',', '!', '?'] and i > prev + 10:
                             # If punctuation, send the buffer
                             if buffer:
@@ -748,21 +817,12 @@ async def llm_generator(
                                 buffer = ""
                             else:
                                 temp_text = response[prev:i+1]
-                            #temp_text = temp_text.strip(' \n*\"‘’“”；：')
+                            print(f"LLM: Sending text into TTS: '{temp_text}'")
                             await output_queue.put(temp_text)
-                            print(f"\ntemp_text in LLM is {temp_text}")
                             prev = i + 1
                     else:
                         prev = i + 1
                 buffer += response[prev:]
-                #buffer.strip(' \n*\"‘’“”；：')
-                global llm_first_chunk_time
-                llm_first_chunk_time = time.time()
-                print(f"LLM: First chunk took {llm_first_chunk_time - llm_start_time:.2f} seconds")
-
-                print(f"\nbuffer in LLM is {buffer}")
-                #await asyncio.sleep(5)
-                
                 if interrupt_event.is_set():
                     print("LLM: Interrupt event set, stopping generation")
                     await output_queue.put(None)
@@ -937,15 +997,25 @@ async def process_text_chunk(text: str, output_queue: asyncio.Queue, tts_model: 
         print(f"TTS: Error processing chunk '{text[:30]}...': {e}")
         return 0
 
-async def tts_pipeline(
+async def azure_tts(
     input_queue: asyncio.Queue, 
     output_queue: asyncio.Queue,
     stop_event: asyncio.Event,
     interrupt_event: asyncio.Event,
-    timeout=30
+    timeout=TIMEOUT,
 ) -> None:
     """
-     TTS pipeline with proper interruption handling.
+    Azure TTS
+    Args:
+        input_queue (asyncio.Queue): Queue for incoming text chunks from LLM.
+        output_queue (asyncio.Queue): Queue for outgoing audio chunks to WebRTC peer.
+        stop_event (asyncio.Event): Event to signal stopping the program.
+        interrupt_event (asyncio.Event): Event to signal interrupting the TTS.
+        timeout (float, optional): Timeout for waiting on input. Default to 600 seconds.
+    Returns:
+        None
+    Raises:
+        Exception: If an error occurs during processing.
     """
     try:
         text_buffer = ""
@@ -976,7 +1046,7 @@ async def tts_pipeline(
                     # Process remaining buffer
                     if text_buffer.strip():
                         current_sentence_id += 1
-                        await process_text_with_interruption(
+                        await process_text(
                             text_buffer.strip(), 
                             output_queue, 
                             stop_event,
@@ -997,7 +1067,7 @@ async def tts_pipeline(
                     
                     if sentence.strip():
                         current_sentence_id += 1
-                        await process_text_with_interruption(
+                        await process_text(
                             sentence.strip(), 
                             output_queue, 
                             stop_event,
@@ -1017,7 +1087,7 @@ async def tts_pipeline(
         print("TTS: Pipeline ended")
 
 
-async def process_text_with_interruption(
+async def process_text(
     text: str, 
     output_queue: asyncio.Queue, 
     stop_event: asyncio.Event,
@@ -1025,7 +1095,7 @@ async def process_text_with_interruption(
     sentence_id: int
 ) -> None:
     """
-    Process TTS text with interruption checking.
+    Process TTS text with two threads to ensure low-latency audio streaming.
     """
     if stop_event.is_set() or interrupt_event.is_set():
         print(f"TTS: Sentence {sentence_id} skipped due to interruption")
@@ -1040,9 +1110,8 @@ async def process_text_with_interruption(
             yield texttospeech.StreamingSynthesizeRequest(
                 input=texttospeech.StreamingSynthesisInput(text=text)
             )
-        
+
         # Process TTS with interruption checking
-        import queue
         audio_chunk_queue = queue.Queue()
         
         def run_streaming_tts():
@@ -1058,7 +1127,6 @@ async def process_text_with_interruption(
             except Exception as e:
                 audio_chunk_queue.put(('error', str(e)))
         
-        import threading
         tts_thread = threading.Thread(target=run_streaming_tts, daemon=True)
         tts_thread.start()
         
@@ -1095,7 +1163,7 @@ async def process_text_with_interruption(
 
 
 async def send_audio_chunks(audio_np: np.ndarray, output_queue: asyncio.Queue, interrupt_event: asyncio.Event):
-    """Send audio chunks with interruption checking."""
+    """Send audio chunks to WebRTC."""
     chunk_size = 240  # 10ms chunks at 24kHz
     
     for i in range(0, len(audio_np), chunk_size):
@@ -1138,23 +1206,6 @@ def extract_complete_sentences(text: str) -> tuple:
         remaining += sentences[i]
     
     return complete_sentences, remaining
-
-def apply_audio_improvements(audio_np: np.ndarray) -> np.ndarray:
-    """Apply basic audio improvements."""
-    if len(audio_np) == 0:
-        return audio_np
-    
-    # Remove DC offset
-    if len(audio_np) > 1:
-        audio_np = audio_np - np.mean(audio_np)
-    
-    # Simple clipping prevention
-    max_val = np.max(np.abs(audio_np))
-    if max_val > 30000:
-        compression_ratio = 30000 / max_val
-        audio_np = (audio_np * compression_ratio).astype(np.int16)
-    
-    return audio_np
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Minimal WebRTC audio logger")

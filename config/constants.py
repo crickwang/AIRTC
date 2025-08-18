@@ -14,7 +14,7 @@ settings = Settings()
 # Environment Variables and Constants
 TIME_PER_CHUNK = 320  # in ms
 ASR_SAMPLE_RATE = 16000  # in Hz
-ASR_LANGUAGE = settings.get_config("asr_language", "cmn-Hans-CN")  # Language code, please refer to
+ASR_LANGUAGE = settings.get_config("asr_language", "zh-CN")  # Language code, please refer to
                          # [https://developers.google.com/workspace/admin/directory/v1/languages]
 ASR_CHUNK_SIZE = int(ASR_SAMPLE_RATE * TIME_PER_CHUNK / 1000)
 CHANNELS = 1
@@ -53,5 +53,4 @@ AZURE_TTS_VOICE = settings.get_config("azure_tts_voice", "zh-CN-YunyangNeural")
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 REEXP = r'(?<=[.!?。，,])\s*'
-
 
