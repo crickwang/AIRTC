@@ -27,17 +27,21 @@ from aiortc import AudioStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
 from av.audio.resampler import AudioResampler
 from aiortc.mediastreams import MediaStreamError
+from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
+import torch.hub
 
 # ASR imports
 from google.cloud import speech_v1 as speech, texttospeech
+from google.protobuf import duration_pb2
+from google.api_core import client_options
 from asr.google_transcription import AudioStream, listen_print_loop
 
 # FunASR imports
 from asr.funasr_stream import ParaformerStreaming
 from funasr import AutoModel 
 
-# OpenAI RealTime WebRTC import
-from asr.openai_transcription import OpenAITranscription
+# # OpenAI RealTime WebRTC import
+# from asr.openai_transcription import OpenAITranscription
 
 # LLM import - OpenAI, Baidu Proxy
 from llm.baidu import BaiduClient 

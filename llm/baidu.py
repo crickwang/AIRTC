@@ -77,11 +77,11 @@ class BaiduClient:
         if users is None or len(users) == 0:
             raise ValueError("Users list cannot be empty.")
 
-        if system is not None:
+        if system is not None and len(system) > 0:
             messages.append({'role': 'system', 'content': system})
 
-        if assistants is None:
-            if len(users) != 1:
+        if assistants is None or len(assistants) == 0:
+            if users is None or len(users) != 1:
                 raise ValueError("Please provide a single user message if "
                                  "no assistant messages are provided.")
             messages.append({'role': 'user', 'content': users[0]})

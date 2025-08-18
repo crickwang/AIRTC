@@ -46,6 +46,7 @@ class AudioStream:
         self.bridging_offset = 0
         self.last_transcript_was_final = False
         self.new_stream = True
+        self.is_speaking = False
         
     def __enter__(self: object) -> object:
         """Opens the stream.
@@ -201,10 +202,13 @@ def listen_print_loop(responses: object, stream: object) -> None:
             
             sys.stdout.write(WHITE)
             sys.stdout.write("\033[K")
+            stream.is_speaking = False
         else:
             sys.stdout.write(RED)
             sys.stdout.write("\033[K")
             sys.stdout.write(str(corrected_time) + ": " + transcript + "\r")
+            
+            stream.is_speaking = True
 
             stream.last_transcript_was_final = False
     return transcript

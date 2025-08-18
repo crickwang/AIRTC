@@ -46,9 +46,10 @@ class GoogleASR:
             interim_results=interim_results,
             single_utterance=single_utterance
         )
+        self.request = speech.StreamingRecognizeRequest
         
-    def send_request(audio_content):
-        speech.StreamingRecognizeRequest(audio_content=audio_content)
+    def send_request(self, audio_content):
+        self.request(audio_content=audio_content)
         
 class BaiduLLM:
     def __init__(
@@ -64,6 +65,25 @@ class BaiduLLM:
         )
         
 class GoogleTTS:
-    pass
-
+    def __init__(
+        self, 
+        voice = TTS_VOICE,
+        language = TTS_LANGUAGE,
+    ):
+        self.client = texttospeech.TextToSpeechClient()
+        self.streaming_config = texttospeech.StreamingSynthesizeConfig(
+            voice=texttospeech.VoiceSelectionParams(
+                name=voice,
+                language_code=language
+            )
+        )
+        self.request = texttospeech.StreamingSynthesizeRequest
+        self.request(streaming_config=self.streaming_config)
+        
+    def send_request(self, sentence):
+        self.request(input=texttospeech.SynthesisInput(text=sentence))
+        
+class AzureTTS:
+    def __init__(self):
+        
 
