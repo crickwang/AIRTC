@@ -1,8 +1,0 @@
-#model: large-v3-turbo-q8_0
-# model: small-q8_0
-output_wav: test.wav
-
-whisper_model: large-v3-turbo-q8_0
-
-openai_model: gpt-4o-mini-transcribe
-openai_transcription_base_url: https://api.openai.com/v1/audio/transcriptions

@@ -4,3 +4,12 @@ logs
 .log
 work_logs
 references
+asr
+llm
+tts
+init_test
+seamless
+openai_realtime.py
+temp.py
+foo.py
+afoo.py

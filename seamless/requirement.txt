@@ -1,6 +1,0 @@
-# Linux or WSL, no Windows
-python==3.10
-fairseq2==0.2.1
-fairseq2n==0.2.1
-torch==2.2.2+cu121
-torchaudio==2.2.2
