@@ -1,0 +1,25 @@
+# ASR model configuration
+# This file contains the path to the ASR model used in the application.
+funasr_model: paraformer-zh-streaming
+whisper_model: large-v3-turbo-q8_0
+asr_chunk_size: [0, 10, 5]
+asr_encoder_chunk_look_back: 4
+asr_decoder_chunk_look_back: 1
+asr_language: zh-CN # This param must be set for both local and online ASR models
+
+whisper_language: zh # Cannot find anny reference, but quite intuitive :)
+
+llm_system_prompt: 你是一个AI助手，能够理解和生成中文文本。请回答用户的问题或执行他们的请求。
+                   不要在回答中包含除了逗号（，）、句号（。）、感叹号（！）和问号（？）以外的任何符号。
+                   不要生成星号（*）， 表情等任何其他符号。
+llm_model: ernie-4.5-0.3b
+
+edge_tts_voice: zh-CN-YunyangNeural
+edge_tts_language: zh-CN
+
+google_tts_voice: cmn-CN-Chirp3-HD-Puck
+google_tts_language: cmn-CN
+
+azure_tts_voice: zh-CN-YunyangNeural
+azure_tts_region: eastus
+stop_word: 退出
