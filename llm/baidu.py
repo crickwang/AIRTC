@@ -8,7 +8,6 @@ class BaiduClient:
     def __init__(
         self: object, 
         model: str, 
-        is_local: bool = False, 
         api_key: str = None, 
         base_url: str = None
     ) -> None:
@@ -28,9 +27,7 @@ class BaiduClient:
         self.model = model
         self.api_key = api_key  
         self.base_url = base_url
-        self.client = None
-        if not is_local:
-            self.connect()
+        self.connect()
 
     def change_model(self: object, model: str) -> None:
         '''

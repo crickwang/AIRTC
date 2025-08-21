@@ -20,6 +20,8 @@ from fractions import Fraction
 import sounddevice as sd
 import pyaudio as pa
 from collections import OrderedDict, deque
+import unicodedata as ucd
+from openai import OpenAI
 
 from dotenv import load_dotenv
 from aiohttp import web

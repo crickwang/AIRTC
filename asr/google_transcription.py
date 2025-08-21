@@ -23,7 +23,7 @@ def get_current_time() -> int:
 class AudioStream:
     """A class to manage audio stream data."""
 
-    def __init__(self: object, audio_queue: queue.Queue, rate: int, chunk_size: int, language_code: str = "en-US"):
+    def __init__(self: object, audio_queue: queue.Queue, rate: int, chunk_size: int):
         """
         Args:
             self: The class instance.
@@ -77,6 +77,21 @@ class AudioStream:
         """
         self.closed = True
         self.audio_queue.put(None)
+        
+    def reset(self: object, audio_queue) -> None:
+        self.audio_queue = audio_queue
+        self.closed = True
+        self.start_time = get_current_time()
+        self.restart_counter = 0
+        self.audio_input = []
+        self.last_audio_input = []
+        self.result_end_time = 0
+        self.is_final_end_time = 0
+        self.final_request_end_time = 0
+        self.bridging_offset = 0
+        self.last_transcript_was_final = False
+        self.new_stream = True
+        self.is_speaking = False
         
     def generate(self: object):
         """
@@ -138,7 +153,7 @@ class AudioStream:
 
             yield b"".join(data)
 
-def listen_print_loop(responses: object, stream: object) -> None:
+def listen_print_loop(responses: object, stream: object) -> str:
     """Iterates through server responses and prints them.
 
     The responses passed is a generator that will block until a response

@@ -42,22 +42,40 @@ google_asr_streaming_config = speech.StreamingRecognitionConfig(
 # Resampler to change audio properties if needed
 resampler = AudioResampler(rate=ASR_SAMPLE_RATE, layout=LAYOUT, format=FORMAT)
 llm_client = BaiduClient(model=LLM_MODEL, api_key=LLM_API_KEY, base_url=LLM_BASE_URL)
-tts_model = EdgeTTS()
+# tts_model = EdgeTTS()
 
-# Google Cloud clients for TTS (online)
-google_tts_client = texttospeech.TextToSpeechClient()
-# See https://cloud.google.com/text-to-speech/docs/voices for all voices.
-google_tts_streaming_config = texttospeech.StreamingSynthesizeConfig(
-    voice=texttospeech.VoiceSelectionParams(
-        name=GOOGLE_TTS_VOICE,
-        language_code=GOOGLE_TTS_LANGUAGE,
-    )
+# # Google Cloud clients for TTS (online)
+# google_tts_client = texttospeech.TextToSpeechClient()
+# # See https://cloud.google.com/text-to-speech/docs/voices for all voices.
+# google_tts_streaming_config = texttospeech.StreamingSynthesizeConfig(
+#     voice=texttospeech.VoiceSelectionParams(
+#         name=TTS_VOICE,
+#         language_code=TTS_LANGUAGE,
+#     )
+# )
+# # Set the config for your stream. The first request must contain your config, 
+# # and then each subsequent request must contain text.
+# google_tts_config_request = texttospeech.StreamingSynthesizeRequest(
+#     streaming_config=google_tts_streaming_config
+# )
+
+# Initialize Azure TTS globally (add this near your other model initializations)
+azure_speech_config = speechsdk.SpeechConfig(
+    subscription=AZURE_TTS_KEY,
+    region=AZURE_TTS_REGION
 )
-# Set the config for your stream. The first request must contain your config, 
-# and then each subsequent request must contain text.
-google_tts_config_request = texttospeech.StreamingSynthesizeRequest(
-    streaming_config=google_tts_streaming_config
+azure_speech_config.speech_synthesis_voice_name = AZURE_TTS_VOICE
+azure_speech_config.set_speech_synthesis_output_format(
+    speechsdk.SpeechSynthesisOutputFormat.Raw24Khz16BitMonoPcm
 )
+
+# Pre-create synthesizer and connection for lower latency
+azure_synthesizer = speechsdk.SpeechSynthesizer(
+    speech_config=azure_speech_config,
+    audio_config=None  # We handle audio stream manually
+)
+azure_connection = speechsdk.Connection.from_speech_synthesizer(azure_synthesizer)
+azure_connection.open(True)  # Pre-connect
 
 start_time = time.time()
 llm_first_chunk_time = 0
@@ -77,7 +95,7 @@ class MultiFrameVAD:
         Args:
             self: The instance of the class.
             threshold: The energy threshold for detecting speech.
-                       In general, noise < 2000 while speech > 20000.
+                       In general, noise < 1000 while speech > 2000.
                        Maybe adjusted based on the noise level of the environment.
             speech_frames_required: The number of consecutive frames required to confirm speech.
         """
@@ -202,7 +220,7 @@ class AudioPlayer(AudioStreamTrack):
         
         # buffer management
         self._audio_buffer = deque()
-        self._max_buffer_ms = 500  # Maximum 500ms of audio buffered
+        self._max_buffer_ms = 30000  # Maximum 30000ms of audio buffered
         self._max_buffer_samples = (self._max_buffer_ms * sample_rate) // 1000
         
         # State tracking
@@ -310,7 +328,7 @@ class AudioPlayer(AudioStreamTrack):
     def request_interrupt(self):
         """Request immediate interruption of audio playback."""
         self._interrupt_requested = True
-        print("AudioPlayer: Interrupt requested")
+        print(f"AudioPlayer: Interrupt requested")
     
     def _clear_buffers(self):
         """Clear all audio buffers immediately."""
@@ -451,6 +469,8 @@ async def offer(request: web.Request) -> web.Response:
     audio_queue = asyncio.Queue(maxsize=100)
     
     # Create components
+    stop_event = asyncio.Event()
+    interrupt_event = asyncio.Event()
     recorder = MediaBlackhole()
     audio_player = AudioPlayer(audio_queue)
     vad = SimpleVAD()
@@ -487,10 +507,7 @@ async def offer(request: web.Request) -> web.Response:
         
         if track.kind == "audio":
             recorder.addTrack(track)
-
             # Create control events to stop or interrupt connection
-            stop_event = asyncio.Event()
-            interrupt_event = asyncio.Event()
             pc._stop_event = stop_event
             pc._interrupt_event = interrupt_event
             
@@ -568,60 +585,6 @@ async def on_shutdown(app: web.Application) -> None:
     await asyncio.gather(*coros)
     pcs.clear()
 
-async def local_asr(track: AudioStreamTrack, stop_event: asyncio.Event = None) -> str:
-    '''
-    Perform FunASR transcription on the audio track.
-    FunASR is an open source streaming ASR model.
-    Abandoned due to its poor performance.
-    Args:
-        track (AudioStreamTrack): The audio track to transcribe.
-        stop_event (asyncio.Event, optional): Event to signal when to stop transcription.
-            Defaults to None.
-    Returns:
-        str: Transcription result.
-    '''
-    text = ''
-    frames = None
-    try:
-        while True:
-            if stop_event and stop_event.is_set():
-                break
-            
-            if frames is not None and frames.shape[0] >= NUM_SAMPLES_PER_CHUNK:
-                print(f"Processing {frames.shape} samples for ASR transcription")
-                # uncomment the asr model first
-                transcription = asr_model.generate(frames)
-                frames = None
-                print(f"Current chunk transcription: {transcription}")
-                if transcription and transcription != '':
-                    text += transcription
-                    
-            # Racing
-            recv_task = asyncio.create_task(track.recv())
-            stop_task = asyncio.create_task(stop_event.wait())
-            done, pending = await asyncio.wait([recv_task, stop_task], 
-                                               return_when=asyncio.FIRST_COMPLETED)
-
-            if recv_task in done:
-                try:
-                    frame = recv_task.result()
-                    frame = resampler.resample(frame)[0].to_ndarray()
-                    frame = np.squeeze(frame, axis=0)
-                    frames = np.concatenate((frames, frame), axis=0) if frames is not None else frame
-                except MediaStreamError:
-                    logger.info(f"User Stops Recording")
-            else:
-                recv_task.cancel()
-                break
-            for task in pending:
-                task.cancel()
-    except Exception as e:
-        logger.error(f"Error during ASR transcription: {e}")
-    finally:
-        await queue.put(None)
-    print(f"Final transcription: {text}")
-    return text
-
 async def google_asr(
     track: AudioStreamTrack, 
     output_queue: asyncio.Queue,
@@ -687,7 +650,6 @@ async def google_asr(
                     audio_queue, 
                     rate=sample_rate, 
                     chunk_size=chunk_size,
-                    language_code=language_code
                 )
 
                 audio_bytes = frame.tobytes()
@@ -1002,7 +964,7 @@ async def azure_tts(
     output_queue: asyncio.Queue,
     stop_event: asyncio.Event,
     interrupt_event: asyncio.Event,
-    timeout=TIMEOUT,
+    timeout=TIMEOUT
 ) -> None:
     """
     Azure TTS
@@ -1017,14 +979,15 @@ async def azure_tts(
     Raises:
         Exception: If an error occurs during processing.
     """
+    total_samples_generated = 0
+    sentence_count = 0
+    
     try:
-        text_buffer = ""
-        current_sentence_id = 0
-        
+        current_tts_task = None
         while not stop_event.is_set():
             try:
                 # Get text from LLM
-                text_chunk = await asyncio.wait_for(input_queue.get(), timeout=timeout)
+                text = await asyncio.wait_for(input_queue.get(), timeout=timeout)
                 
                 if stop_event.is_set():
                     print("TTS: Stopping")
@@ -1032,7 +995,6 @@ async def azure_tts(
                 
                 if interrupt_event.is_set():
                     print("TTS: Interrupted, clearing buffer")
-                    text_buffer = ""
                     # Clear output queue
                     try:
                         while True:
@@ -1041,24 +1003,15 @@ async def azure_tts(
                         pass
                     continue
                 
-                if text_chunk is None:
-                    print("TTS: End of input")
-                    # Process remaining buffer
-                    if text_buffer.strip():
-                        current_sentence_id += 1
-                        await process_text(
-                            text_buffer.strip(), 
-                            output_queue, 
-                            stop_event,
-                            interrupt_event, 
-                            current_sentence_id
-                        )
-                    break
+                if text is None:
+                    print("TTS: End of input from LLM")
+                    # Wait for current TTS to finish
+                    if current_tts_task and not current_tts_task.done():
+                        await current_tts_task
+                    continue
                 
-                text_buffer += text_chunk
-                
-                # Extract complete sentences
-                sentences, text_buffer = extract_complete_sentences(text_buffer)
+                print(f"TTS: Received text: '{text[:50]}...'")
+                sentences = text.split()
                 
                 for sentence in sentences:
                     if stop_event.is_set() or interrupt_event.is_set():
@@ -1066,145 +1019,202 @@ async def azure_tts(
                         break
                     
                     if sentence.strip():
-                        current_sentence_id += 1
-                        await process_text(
-                            sentence.strip(), 
-                            output_queue, 
-                            stop_event,
-                            interrupt_event, 
-                            current_sentence_id
+                        sentence_count += 1
+                        
+                        # Wait for previous TTS to finish before starting new one
+                        if current_tts_task and not current_tts_task.done():
+                            await current_tts_task
+                        
+                        # Start new streaming TTS
+                        current_tts_task = asyncio.create_task(
+                            process_text(sentence.strip(), output_queue, stop_event, interrupt_event, sentence_count)
                         )
+                        
+                        # For the first sentence, wait a bit to get audio flowing
+                        if sentence_count == 1:
+                            try:
+                                await asyncio.wait_for(asyncio.shield(current_tts_task), timeout=0.5)
+                            except asyncio.TimeoutError:
+                                pass  # Continue processing
+                        
+                        samples = await current_tts_task
+                        total_samples_generated += samples
                 
             except asyncio.TimeoutError:
                 print("TTS: Timeout waiting for input")
                 break
             except Exception as e:
-                print(f"TTS: Error: {e}")
-                break
-    
+                print(f"TTS: Error processing text: {e}")
+                import traceback
+                traceback.print_exc()
+                continue
+        
+        print(f"TTS: Completed - {sentence_count} sentences, {total_samples_generated} samples")
+        
     finally:
         await output_queue.put(None)
-        print("TTS: Pipeline ended")
+        print("TTS: Sent end marker")
 
 
 async def process_text(
-    text: str, 
+    sentence: str, 
     output_queue: asyncio.Queue, 
     stop_event: asyncio.Event,
-    interrupt_event: asyncio.Event, 
-    sentence_id: int
-) -> None:
+    interrupt_event: asyncio.Event,
+    sentence_id: int,
+    ) -> int:
     """
-    Process TTS text with two threads to ensure low-latency audio streaming.
+    Process TTS with Azure true streaming - output audio chunks as they arrive.
+    Uses the synthesizing event for immediate audio streaming.
     """
+    
     if stop_event.is_set() or interrupt_event.is_set():
         print(f"TTS: Sentence {sentence_id} skipped due to interruption")
         return
+
+    print(f"TTS: Processing sentence {sentence_id}: '{sentence[:50]}...'")
+
+    if not sentence.strip():
+        return 0
     
-    print(f"TTS: Processing sentence {sentence_id}: '{text[:50]}...'")
+    start_time = time.time()
+    total_samples = 0
+    first_chunk_time = None
+    
+    # Thread-safe containers
+    audio_chunk_queue = queue.Queue()
+    error_container = [None]
+    synthesis_complete = threading.Event()
     
     try:
-        # Create streaming request
-        def request_generator():
-            yield google_tts_config_request
-            yield texttospeech.StreamingSynthesizeRequest(
-                input=texttospeech.StreamingSynthesisInput(text=text)
-            )
-
-        # Process TTS with interruption checking
-        audio_chunk_queue = queue.Queue()
+        print(f"TTS: Starting Azure streaming for sentence {sentence_id}: '{sentence[:50]}...'")
         
-        def run_streaming_tts():
-            try:
-                streaming_responses = google_tts_client.streaming_synthesize(request_generator())
-                for response in streaming_responses:
-                    if interrupt_event.is_set():
-                        print(f"TTS: Sentence {sentence_id} interrupted during generation")
-                        break
-                    if response.audio_content:
-                        audio_chunk_queue.put(('audio', response.audio_content))
-                audio_chunk_queue.put(('done', None))
-            except Exception as e:
-                audio_chunk_queue.put(('error', str(e)))
-        
-        tts_thread = threading.Thread(target=run_streaming_tts, daemon=True)
-        tts_thread.start()
-        
-        # Process audio chunks with interruption checking
-        while not interrupt_event.is_set():
-            try:
-                chunk_type, chunk_data = audio_chunk_queue.get(timeout=5.0)
+        def on_synthesizing(evt):
+            """Handle audio chunks as they arrive - TRUE STREAMING"""
+            nonlocal first_chunk_time, total_samples
+            
+            audio_data = evt.result.audio_data
+            
+            if interrupt_event.is_set() or stop_event.is_set():
+                print(f"TTS: Interrupt event set during synthesis of sentence {sentence_id}")
+                error_container[0] = "Interrupted or stopped"
+                audio_chunk_queue.put(('error', "Interrupted or stopped"))
+                synthesis_complete.set()
+                return
+            
+            if audio_data and len(audio_data) > 0:
+                # Track first chunk timing
+                if first_chunk_time is None:
+                    first_chunk_time = time.time()
+                    latency = first_chunk_time - start_time
+                    print(f"TTS: First audio chunk for sentence {sentence_id} in {latency:.3f}s")
                 
-                if chunk_type == 'done':
-                    break
-                elif chunk_type == 'error':
+                # Put audio chunk in queue immediately
+                audio_chunk_queue.put(('audio', audio_data))
+                total_samples += len(audio_data) // 2  # 16-bit samples
+                print(f"TTS: Streamed {len(audio_data)} bytes for sentence {sentence_id}")
+        
+        def on_synthesis_completed(evt):
+            """Handle synthesis completion"""
+            if evt.result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+                # Log latency metrics if available
+                if evt.result.properties:
+                    first_byte_latency = evt.result.properties.get_property(
+                        speechsdk.PropertyId.SpeechServiceResponse_SynthesisFirstByteLatencyMs
+                    )
+                    if first_byte_latency:
+                        print(f"TTS: Sentence {sentence_id} - First byte latency: {first_byte_latency}ms")
+            else:
+                error_msg = f"Synthesis failed: {evt.result.reason}"
+                error_container[0] = error_msg
+                audio_chunk_queue.put(('error', error_msg))
+            
+            audio_chunk_queue.put(('done', None))
+            print("===========================END EVENT SET HERE!!!==================================")
+            synthesis_complete.set()
+        
+        def on_synthesis_cancelled(evt):
+            """Handle synthesis cancellation"""
+            error_msg = f"Synthesis cancelled: {evt.result.cancellation_details.error_details}"
+            error_container[0] = error_msg
+            audio_chunk_queue.put(('error', error_msg))
+            synthesis_complete.set()
+        
+        # Connect event handlers for streaming
+        azure_synthesizer.synthesizing.connect(on_synthesizing)
+        azure_synthesizer.synthesis_completed.connect(on_synthesis_completed)
+        azure_synthesizer.synthesis_canceled.connect(on_synthesis_cancelled)
+        
+        # Start synthesis (non-blocking)
+        def start_synthesis():
+            azure_synthesizer.speak_text_async(sentence)
+        
+        # Run synthesis in background thread
+        synthesis_thread = threading.Thread(target=start_synthesis, daemon=True)
+        synthesis_thread.start()
+        
+        # Process audio chunks as they arrive
+        while not synthesis_complete.is_set() or not audio_chunk_queue.empty():
+            try:
+                # Get next chunk with short timeout
+                chunk_type, chunk_data = audio_chunk_queue.get(timeout=0.1)
+                
+                if chunk_type == 'error':
                     print(f"TTS: Error in sentence {sentence_id}: {chunk_data}")
                     break
+                elif chunk_type == 'done':
+                    print(f"TTS: Streaming complete for sentence {sentence_id}")
+                    break
                 elif chunk_type == 'audio':
-                    if interrupt_event.is_set():
-                        print(f"TTS: Sentence {sentence_id} interrupted during audio processing")
-                        break
-                    
+                    # Convert bytes to numpy array (16-bit PCM)
                     audio_np = np.frombuffer(chunk_data, dtype=np.int16)
+                    
                     if len(audio_np) > 0:
-                        await send_audio_chunks(audio_np, output_queue, interrupt_event)
+                        # Apply audio improvements
+                        #audio_np = apply_audio_improvements(audio_np)
+                        
+                        # Send immediately
+                        await send_audio(audio_np, output_queue)
                 
             except queue.Empty:
-                print(f"TTS: Timeout waiting for audio in sentence {sentence_id}")
-                break
+                # Continue waiting for more chunks
+                await asyncio.sleep(0.01)
         
-        if interrupt_event.is_set():
-            print(f"TTS: Sentence {sentence_id} was interrupted")
-        else:
-            print(f"TTS: Sentence {sentence_id} completed")
-            
+        # Disconnect event handlers
+        azure_synthesizer.synthesizing.disconnect_all()
+        azure_synthesizer.synthesis_completed.disconnect_all()
+        azure_synthesizer.synthesis_canceled.disconnect_all()
+        
+        processing_time = time.time() - start_time
+        print(f"TTS: Sentence {sentence_id} completed in {processing_time:.2f}s, {total_samples} samples")
+
+        return total_samples
+        
     except Exception as e:
-        print(f"TTS: Error processing sentence {sentence_id}: {e}")
+        print(f"TTS: Error in Azure streaming TTS for sentence {sentence_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return 0
 
 
-async def send_audio_chunks(audio_np: np.ndarray, output_queue: asyncio.Queue, interrupt_event: asyncio.Event):
-    """Send audio chunks to WebRTC."""
-    chunk_size = AUDIO_CHUNK_SIZE
+async def send_audio(audio_np: np.ndarray, 
+                     output_queue: asyncio.Queue, 
+                     samples_per_frame: int=SAMPLES_PER_FRAME
+                     ) -> None:
+    """Send audio chunks immediately without waiting for complete sentence."""
+    if len(audio_np) == 0:
+        return
+
+    chunk_size = samples_per_frame  # 10ms chunks
     
     for i in range(0, len(audio_np), chunk_size):
-        if interrupt_event.is_set():
-            break
-        
         chunk = audio_np[i:min(i + chunk_size, len(audio_np))]
-        if len(chunk) < chunk_size:
-            # Pad last chunk
-            chunk = np.pad(chunk, (0, chunk_size - len(chunk)), 'constant')
-        
+
+        if len(chunk) < samples_per_frame:
+            chunk = np.pad(chunk, (0, samples_per_frame - len(chunk)), 'constant')
+
         await output_queue.put(chunk)
-        await asyncio.sleep(0.001)  # Small delay to prevent overwhelming
-
-
-def extract_complete_sentences(text: str) -> tuple:
-    """Extract complete sentences for processing."""
-    
-    # Split on sentence endings
-    sentences = re.split(r'([.!?。！？ ]+)', text)
-    
-    complete_sentences = []
-    remaining = ""
-    
-    i = 0
-    while i < len(sentences) - 1:
-        sentence = sentences[i]
-        if i + 1 < len(sentences) and re.match(r'[.!?。！？ ]+', sentences[i + 1]):
-            sentence += sentences[i + 1]
-            if sentence.strip():
-                complete_sentences.append(sentence.strip())
-            i += 2
-        else:
-            remaining += sentence
-            i += 1
-    
-    # Add any remaining parts
-    if i < len(sentences):
-        remaining += sentences[i]
-    
-    return complete_sentences, remaining
+        await asyncio.sleep(0.001)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Minimal WebRTC audio logger")
