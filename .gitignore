@@ -13,3 +13,6 @@ openai_realtime.py
 temp.py
 foo.py
 afoo.py
+.idea
+.vscode
+__pycache__
