@@ -255,20 +255,6 @@ function start() {
         });
 }
 
-function pause() {
-    if (localAudioTrack) {
-        localAudioTrack.enabled = false;
-        console.log("Audio track paused");
-    }
-}
-
-function resume() {
-    if (localAudioTrack) {
-        localAudioTrack.enabled = true;
-        console.log("Audio track resumed");
-    }
-}
-
 function stop() {
     console.log("Stopping connection...");
     

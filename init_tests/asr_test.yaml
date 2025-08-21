@@ -1,0 +1,6 @@
+large_model: large-v3-turbo-q8_0
+middle_model: medium-q8_0
+small_model: small-q8_0
+model: small-q8_0
+mp3_file: ../audio/tts_output.mp3
+# wav_file: edge_tts_output.wav
