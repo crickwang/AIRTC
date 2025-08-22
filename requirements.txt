@@ -2,7 +2,6 @@ aiohttp==3.11.18
 aiortc==1.13.0
 asyncio==3.4.3
 av==14.4.0
-pyaudio==0.2.14
 sounddevice==0.5.2
 pydub==0.25.1
 numpy==2.2.5
