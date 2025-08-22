@@ -7,6 +7,8 @@ from vad.vad import VADFactory
 import requests
 from dotenv import load_dotenv
 import os
+import json
+from aiortc import RTCDataChannel
 
 load_dotenv()
 
@@ -79,3 +81,11 @@ def create_recognizer(recognizer_id: str) -> cloud_speech.Recognizer:
 
     print("Created Recognizer:", recognizer.name)
     return recognizer
+
+def log_to_client(dc: RTCDataChannel, msg: str):
+    if dc and dc.readyState == "open":
+        try:
+            log_data = json.dumps({"type": "log", "message": msg})
+            dc.send(log_data)
+        except Exception as e:
+            print(f"Error sending log to client: {e}")

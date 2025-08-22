@@ -7,7 +7,7 @@ import traceback
 import uuid
 import hashlib
 from aiohttp import web
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel
 from aiortc.contrib.media import MediaBlackhole
 from av.audio.resampler import AudioResampler
 from config.constants import *
@@ -63,7 +63,7 @@ class WebPage:
         pc = RTCPeerConnection()
         pc_id = f"PC-{uuid.uuid4().hex[:8]}"
         self.pcs.add(pc)
-
+        pc.log_channel = pc.createDataChannel("log", ordered=True)
         print(f"Current {pc_id}: New connection established")
 
         # Create session-specific queues
@@ -90,27 +90,30 @@ class WebPage:
                             threshold=VAD_THRESHOLD,
                             )
         resampler = AudioResampler(rate=ASR_SAMPLE_RATE, 
-                                layout=LAYOUT, 
-                                format=FORMAT,
-                                )
+                                   layout=LAYOUT, 
+                                   format=FORMAT,
+                                  )
         asr_client = create_client("asr", 
                                    platform=self.args.asr, 
                                    rate=ASR_SAMPLE_RATE, 
                                    language_code=ASR_LANGUAGE, 
                                    chunk_size=ASR_CHUNK_SIZE,
                                    stop_word=STOP_WORD,
+                                   pc=pc,
                                    )
         llm_client = create_client("llm", 
                                     platform=self.args.llm, 
                                     model=LLM_MODEL, 
                                     api_key=LLM_API_KEY, 
                                     base_url=LLM_BASE_URL,
+                                    pc=pc,
                                     )
         tts_client = create_client("tts", 
                                     platform=self.args.tts, 
                                     voice=AZURE_TTS_VOICE, 
                                     key=AZURE_TTS_KEY, 
                                     region=AZURE_TTS_REGION,
+                                    pc=pc,
                                     )
 
         pc.addTrack(audio_player)
@@ -119,9 +122,9 @@ class WebPage:
         async def on_connectionstatechange():
             print(f"Current {pc_id}: Connection state: {pc.connectionState}")
             if pc.connectionState == 'connected':
-                print('=' * 50)
-                print("Start Recording")
-                print('=' * 50)
+                msg = '=' * 50 + "\nStart Recording\n" + '=' * 50
+                print(msg)
+                log_to_client(pc.log_channel, msg)
             if pc.connectionState in ['closed', 'failed', 'disconnected']:
                 # Cancel all tasks
                 if hasattr(pc, '_stop_event'):
@@ -150,7 +153,6 @@ class WebPage:
                 # Create control events to stop or interrupt connection
                 pc._stop_event = stop_event
                 pc._interrupt_event = interrupt_event
-                
                 try:
                     pc._asr_task = asyncio.create_task(
                         asr_client.generate(
@@ -194,7 +196,9 @@ class WebPage:
 
             @track.on("ended")
             async def on_ended():
-                print(f"Current {pc_id}: Track ended")
+                msg = f"Current {pc_id}: Track ended"
+                print(msg)
+                log_to_client(pc.log_channel, msg)
                 if hasattr(pc, "_stop_event"):
                     pc._stop_event.set()
                 await recorder.stop()

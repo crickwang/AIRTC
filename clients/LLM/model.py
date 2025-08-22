@@ -6,6 +6,7 @@ import traceback
 import unicodedata as ucd
 from register import register
 from config.constants import TIMEOUT
+from clients.utils import log_to_client
 
 class LLMClient(ABC):
     def __init__(self, model: str, api_key: str, base_url: str, **kwargs):
@@ -32,6 +33,7 @@ class BaiduLLM(LLMClient):
         model: str, 
         api_key: str, 
         base_url: str, 
+        **kwargs,
     ) -> None:
         '''
         Initialize the Baidu LLM client with system prompt and user/assistant messages.
@@ -48,7 +50,8 @@ class BaiduLLM(LLMClient):
         '''
         super().__init__(model, api_key, base_url)
         self.connect()
-            
+        self.pc = kwargs.get('pc', None)
+
     def change_model(self: object, model: str) -> None:
         '''
         Change the model used by the LLM client.
@@ -68,7 +71,10 @@ class BaiduLLM(LLMClient):
                 raise ValueError("API key and base URL must be provided.")
             self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         except Exception as e:
-            print(f"Error in connecting to API: {e}")
+            msg = f"LLM: Error connecting to Baidu LLM API: {e}"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
 
     def message(
         self: object, 
@@ -218,7 +224,10 @@ class BaiduLLM(LLMClient):
                                     buffer = ""
                                 else:
                                     temp_text = response[prev:i]
-                                print(f"LLM: Sending text into TTS: '{temp_text}'")
+                                msg = f"LLM: Sending text into TTS: '{temp_text}'"
+                                print(msg)
+                                if self.pc:
+                                    log_to_client(self.pc.log_channel, msg)
                                 await output_queue.put(temp_text)
                                 prev = i + 1
                             else:
@@ -237,12 +246,18 @@ class BaiduLLM(LLMClient):
                 assistants.append(total_response)
 
         except Exception as e:
-            print(f"LLM: Error: {e}")
+            msg = f"LLM: Error: {e}"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
             traceback.print_exc()
         finally:
             # Always send end marker
             await output_queue.put(None)
-            print("LLM: Sent end marker")
+            msg = "LLM: end of processing"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
 
 class LLMClientFactory:
     @staticmethod

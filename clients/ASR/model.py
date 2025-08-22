@@ -12,7 +12,7 @@ from av.audio.resampler import AudioResampler
 from vad.vad import VAD
 from register import register
 from pywhispercpp.model import Model as whisper_model
-from clients.ASR.utils import *
+from clients.utils import *
 from config.constants import TIMEOUT, FUN_ASR_MODEL, STREAMING_LIMIT, ROOT
 import os
 
@@ -98,6 +98,7 @@ class GoogleASR(ASRClient):
         self.new_stream = True
         self.is_speaking = False
         self.stop_word = stop_word
+        self.pc = kwargs.get('pc', None)
         
     def __enter__(self: object) -> object:
         """Opens the stream.
@@ -289,7 +290,10 @@ class GoogleASR(ASRClient):
                     self.is_speaking = True
                     self.last_transcript_was_final = False
         except Exception as e:
-            print(f"Error in ASR: {e}")
+            msg = f"Error in ASR: {e}"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
         return transcript
     
     def send_request(self):
@@ -350,9 +354,12 @@ class GoogleASR(ASRClient):
                 if not vad or vad.is_speech(frame):
                     audio_player.request_interrupt()
                     interrupt_event.set()
-                    
-                    print("ASR: Speech detected - starting transcription")
-                    
+
+                    msg = f"ASR: Speech detected - starting transcription"
+                    print(msg)
+                    if self.pc:
+                        log_to_client(self.pc.log_channel, msg)
+
                     # queue that contains pcm data, feed into google STT API
                     # wrapped in AudioStream instance
                     audio_queue = queue.Queue()
@@ -370,11 +377,17 @@ class GoogleASR(ASRClient):
                             with self:
                                 transcript = self.send_request()
                                 if self.stop_word and self.stop_word == transcript:
-                                    print("Stop word triggered, exiting the program")
+                                    msg = "Stop word triggered, exiting the program"
+                                    print(msg)
+                                    if self.pc:
+                                        log_to_client(self.pc.log_channel, msg)
                                     stop_event.set()
                                 session_output_queue.put(transcript)
                         except Exception as e:
-                            print(f"ASR thread error: {e}")
+                            msg = f"ASR thread error: {e}"
+                            print(msg)
+                            if self.pc:
+                                log_to_client(self.pc.log_channel, msg)
                             session_output_queue.put(None)
                     
                     asr_thread = threading.Thread(target=run_google_stream, daemon=True)
@@ -393,6 +406,9 @@ class GoogleASR(ASRClient):
                                 asr_thread.join(timeout=5)
                                 transcript = session_output_queue.get_nowait() if not session_output_queue.empty() else None
                                 await output_queue.put(transcript)
+                                if self.pc:
+                                    msg = f"ASR: Transcription result - {transcript}"
+                                    log_to_client(self.pc.log_channel, msg)
                                 interrupt_event.clear()
                                 break         
                             frame = await asyncio.wait_for(track.recv(), timeout=1.0)
@@ -402,13 +418,22 @@ class GoogleASR(ASRClient):
                             audio_queue.put(audio_bytes)
                                 
                         except asyncio.TimeoutError:
-                            print("ASR: Timeout waiting for more audio")
+                            msg = "ASR: Timeout waiting for more audio"
+                            print(msg)
+                            if self.pc:
+                                log_to_client(self.pc.log_channel, msg)
                             self.closed = True
                             break
         except asyncio.TimeoutError:
-            print(f"ASR: User inactive for {timeout} seconds")
+            msg = f"ASR: User inactive for {timeout} seconds"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
         except Exception as e:
-            print(f"ASR: Error: {e}")
+            msg = f"ASR: Error: {e}"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
             traceback.print_exc()
         finally:
             await output_queue.put(None)
@@ -439,6 +464,7 @@ class WhisperASR(ASRClient):
         self.audio_queue = None
         self.language_code = language_code
         self.stop_word = stop_word
+        self.pc = kwargs.get('pc', None)
 
     async def generate(
         self: object,
@@ -488,8 +514,10 @@ class WhisperASR(ASRClient):
                     audio_player.request_interrupt()
                     interrupt_event.set()
                     
-                    print("ASR: Speech detected - starting transcription")
-                    
+                    msg = f"ASR: Speech detected - starting transcription"
+                    print(msg)
+                    if self.pc:
+                        log_to_client(self.pc.log_channel, msg)
                     # queue that contains pcm data, feed into google STT API
                     # wrapped in AudioStream instance
                     audio_queue = queue.Queue()
@@ -503,6 +531,7 @@ class WhisperASR(ASRClient):
                     def run_whisper_stream():
                         """Run Whisper ASR in separate thread."""
                         try:
+                            tot_transcript = ""
                             with self:
                                 temp_buffer = []
                                 while True:
@@ -515,20 +544,27 @@ class WhisperASR(ASRClient):
                                             language=self.language_code,
                                         )
                                         temp_buffer = []
-                                        session_output_queue.put(transcript[0].text.strip())
+                                        tot_transcript += transcript[0].text.strip()
                         except queue.Empty:
                             transcript = self.model.transcribe(
                                 media=np.array(temp_buffer, dtype=np.int16),
                                 n_processors=len(temp_buffer),
                                 language=self.language_code,
                             )
+                            tot_transcript += transcript[0].text.strip()
                             temp_buffer = []
-                            if self.stop_word and self.stop_word == transcript[0].text.strip():
-                                print("Stop word triggered, exiting the program")
+                            if self.stop_word and self.stop_word == tot_transcript:
+                                msg = f"ASR: Stop word '{self.stop_word}' triggered, exiting the program"
+                                print(msg)
+                                if self.pc:
+                                    log_to_client(self.pc.log_channel, msg)
                                 stop_event.set()
-                            session_output_queue.put(transcript[0].text.strip())
+                            session_output_queue.put(tot_transcript)
                         except Exception as e:
-                            print(f"ASR thread error: {e}")
+                            msg = f"ASR thread error: {e}"
+                            print(msg)
+                            if self.pc:
+                                log_to_client(self.pc.log_channel, msg)
                             session_output_queue.put(None)
                     
                     asr_thread = threading.Thread(target=run_whisper_stream, daemon=True)
@@ -560,13 +596,22 @@ class WhisperASR(ASRClient):
                             audio_queue.put(frame)
 
                         except asyncio.TimeoutError:
-                            print("ASR: Timeout waiting for more audio")
+                            msg = "ASR: Timeout waiting for more audio"
+                            print(msg)
+                            if self.pc:
+                                log_to_client(self.pc.log_channel, msg)
                             self.closed = True
                             break
         except asyncio.TimeoutError:
-            print(f"ASR: User inactive for {timeout} seconds")
+            msg = f"ASR: User inactive for {timeout} seconds"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
         except Exception as e:
-            print(f"ASR: Error: {e}")
+            msg = f"ASR: Error: {e}"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
             traceback.print_exc()
         finally:
             await output_queue.put(None)
@@ -607,6 +652,7 @@ class FunASR(ASRClient):
         self.cache = {}
         self.chunk_stride = chunk_size[1] * 960  # Assuming 16kHz sample rate, 60ms frame = 960 samples
         self.stop_word = stop_word
+        self.pc = kwargs.get('pc', None)
     
     async def generate(
         self: object,
@@ -653,7 +699,10 @@ class FunASR(ASRClient):
                     audio_player.request_interrupt()
                     interrupt_event.set()
                     
-                    print("ASR: Speech detected - starting transcription")
+                    msg = "ASR: Speech detected - starting transcription"
+                    print(msg)
+                    if self.pc:
+                        log_to_client(self.pc.log_channel, msg)
                     
                     # queue that contains pcm data, feed into google STT API
                     # wrapped in AudioStream instance
@@ -685,13 +734,19 @@ class FunASR(ASRClient):
                                                             decoder_chunk_look_back=self.decoder_chunk_look_back)
                                     text += res[0]['text'] if res else ''
                                 if self.stop_word and self.stop_word == text.strip():
-                                    print("Stop word triggered, exiting the program")
+                                    msg = "Stop word triggered, exiting the program"
+                                    print(msg)
+                                    if self.pc:
+                                        log_to_client(self.pc.log_channel, msg)
                                     stop_event.set()
                                 session_output_queue.put(text)
                         except queue.Empty:
                             pass
                         except Exception as e:
-                            print(f"ASR: Error in transcription thread: {e}")
+                            msg = f"ASR: Error in transcription thread: {e}"
+                            print(msg)
+                            if self.pc:
+                                log_to_client(self.pc.log_channel, msg)
 
                     asr_thread = threading.Thread(target=run_paraformer, daemon=True)
                     asr_thread.start()
@@ -714,6 +769,9 @@ class FunASR(ASRClient):
                                 asr_thread.join(timeout=10)
                                 transcript = session_output_queue.get_nowait() if not session_output_queue.empty() else None
                                 await output_queue.put(transcript)
+                                if self.pc and transcript:
+                                    msg = f"ASR: Transcription result - {transcript}"
+                                    log_to_client(self.pc.log_channel, msg)
                                 interrupt_event.clear()
                                 break         
                             frame = await asyncio.wait_for(track.recv(), timeout=1.0)
@@ -722,13 +780,22 @@ class FunASR(ASRClient):
                             audio_queue.put(frame)
 
                         except asyncio.TimeoutError:
-                            print("ASR: Timeout waiting for more audio")
+                            msg = "ASR: Timeout waiting for more audio"
+                            print(msg)
+                            if self.pc:
+                                log_to_client(self.pc.log_channel, msg)
                             self.closed = True
                             break
         except asyncio.TimeoutError:
-            print(f"ASR: User inactive for {timeout} seconds")
+            msg = f"ASR: User inactive for {timeout} seconds"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
         except Exception as e:
-            print(f"ASR: Error: {e}")
+            msg = f"ASR: Error: {e}"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
             traceback.print_exc()
         finally:
             await output_queue.put(None)

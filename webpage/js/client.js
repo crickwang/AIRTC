@@ -2,7 +2,30 @@
 let pc = null;
 let localStream = null;
 let localAudioTrack = null;
-let audioContext = null; // Module-level AudioContext variable
+let audioContext = null;
+let logChannel = null;
+
+// Add log message to the frontend
+function addLogMessage(message, type = 'info') {
+    const logContainer = document.getElementById('logContainer');
+    if (!logContainer) return;
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry log-${type}`;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span> <span class="message">${message}</span>`;
+    
+    logContainer.appendChild(logEntry);
+    
+    // Auto-scroll to bottom
+    logContainer.scrollTop = logContainer.scrollHeight;
+    
+    // Keep only last 100 messages
+    while (logContainer.children.length > 100) {
+        logContainer.removeChild(logContainer.firstChild);
+    }
+}
 
 // AudioContext management functions
 function ensureAudioContext() {
@@ -32,11 +55,57 @@ function createPeerConnection() {
     
     pc = new RTCPeerConnection(config);
 
+
+    logChannel = pc.createDataChannel('logs', {
+        ordered: true
+    });
+
+    pc.log_channel = logChannel;
+
+    logChannel.onopen = function() {
+        addLogMessage('Data channel opened', 'client');
+    };
+    
+    logChannel.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'log') {
+                addLogMessage(data.message, 'server');
+            }
+        } catch (e) {
+            addLogMessage('Received: ' + event.data, 'server');
+        }
+    };
+    
+    logChannel.onerror = function(error) {
+        addLogMessage('Data channel error: ' + error, 'error');
+    };
+    
+    logChannel.onclose = function() {
+        addLogMessage('Data channel closed', 'warning');
+    };
+
     pc.onconnectionstatechange = () => {
         console.log("Connection state:", pc.connectionState);
         if (["disconnected", "failed", "closed"].includes(pc.connectionState)) {
             stop();
         }
+    };
+
+    pc.ondatachannel = function(event) {
+        const channel = event.channel;
+        addLogMessage(`Received data channel: ${channel.label}`, 'client');
+        
+        channel.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'log') {
+                    addLogMessage(data.message, 'server');
+                }
+            } catch (e) {
+                addLogMessage('Server: ' + event.data, 'server');
+            }
+        };
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -286,6 +355,13 @@ function stop() {
     const message = document.getElementById('playback-message');
     if (message) {
         document.body.removeChild(message);
+    }
+}
+
+function clearLogs() {
+    const logContainer = document.getElementById('logContainer');
+    if (logContainer) {
+        logContainer.innerHTML = '';
     }
 }
 

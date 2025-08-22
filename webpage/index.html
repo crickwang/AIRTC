@@ -19,6 +19,14 @@
       <button id="startButton" class="btn btn-primary" onclick="start()">Start</button>
       <button id="stopButton" class="btn btn-secondary" onclick="stop()">Stop</button>
     </div>
+    <div class="logs-section">
+      <div class="logs-header">
+        <h3>Text Output</h3>
+        <button class="clear-btn" onclick="clearLogs()">Clear Logs</button>
+      </div>
+      <div id="logContainer" class="log-container">
+      </div>
+    </div>
     <!--<div class="mb-3">
       <p><strong>Remote Audio Visualization (Red):</strong></p>
       <canvas id="backendVisualizer" class="visualizer"></canvas>

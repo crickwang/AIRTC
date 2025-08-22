@@ -14,6 +14,7 @@ from config.constants import TIMEOUT
 from pathlib import Path
 import re
 from config.constants import AUDIO_CHUNK_SIZE
+from clients.utils import log_to_client
 
 class TTSClient(ABC):
     def __init__(self, **kwargs):
@@ -32,7 +33,7 @@ class TTSClient(ABC):
   
 @register.add_model("tts", "azure")
 class AzureTTS(TTSClient):
-    def __init__(self, voice: str, key: str, region: str):
+    def __init__(self, voice: str, key: str, region: str, **kwargs):
         """
         Initialize AzureTTS instance.
         Args:
@@ -56,6 +57,7 @@ class AzureTTS(TTSClient):
         )
         self.connection = speechsdk.Connection.from_speech_synthesizer(self.synthesizer)
         self.connection.open(True)
+        self.pc = kwargs.get('pc', None)
         
     async def generate(
         self: object,
@@ -91,11 +93,17 @@ class AzureTTS(TTSClient):
                     text = await asyncio.wait_for(input_queue.get(), timeout=timeout)
                     
                     if stop_event.is_set():
-                        print("TTS: Stopping")
+                        msg = "TTS: Stopping"
+                        print(msg)
+                        if self.pc:
+                            log_to_client(self.pc.log_channel, msg)
                         break
                     
                     if interrupt_event.is_set():
-                        print("TTS: Interrupted, clearing buffer")
+                        msg = "TTS: Interrupted, clearing buffer"
+                        print(msg)
+                        if self.pc:
+                            log_to_client(self.pc.log_channel, msg)
                         # Clear output queue
                         try:
                             while True:
@@ -105,7 +113,10 @@ class AzureTTS(TTSClient):
                         continue
                     
                     if text is None:
-                        print("TTS: End of input from LLM")
+                        msg = "TTS: End of input from LLM"
+                        print(msg)
+                        if self.pc:
+                            log_to_client(self.pc.log_channel, msg)
                         # Wait for current TTS to finish
                         if current_tts_task and not current_tts_task.done():
                             await current_tts_task
@@ -116,7 +127,10 @@ class AzureTTS(TTSClient):
                     
                     for sentence in sentences:
                         if stop_event.is_set() or interrupt_event.is_set():
-                            print("TTS: Interrupted during sentence processing")
+                            msg = "TTS: Interrupted during sentence processing"
+                            print(msg)
+                            if self.pc:
+                                log_to_client(self.pc.log_channel, msg)
                             break
                         
                         if sentence.strip():
@@ -161,7 +175,10 @@ class AzureTTS(TTSClient):
             
         finally:
             await output_queue.put(None)
-            print("TTS: Sent end marker")
+            msg = "TTS: end of processing"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
 
 
     async def process_text(
@@ -197,8 +214,11 @@ class AzureTTS(TTSClient):
         synthesis_complete = threading.Event()
         
         try:
-            print(f"TTS: Starting Azure streaming for sentence {sentence_id}: '{sentence[:50]}...'")
-            
+            msg = f"TTS: Starting streaming for sentence {sentence_id}: '{sentence}...'"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
+
             def on_synthesizing(evt):
                 """Handle audio chunks as they arrive - TRUE STREAMING"""
                 nonlocal first_chunk_time, total_samples
