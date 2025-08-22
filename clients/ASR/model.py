@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 import queue
 import sys
 from google.cloud import speech_v1 as speech
-from asr.funasr_stream import ParaformerStreaming
 from funasr import AutoModel
 from aiortc import AudioStreamTrack 
 import asyncio
@@ -601,8 +600,7 @@ class FunASR(ASRClient):
             encoder_chunk_look_back (int): Number of chunks to look back for encoder self-attention.
             decoder_chunk_look_back (int): Number of encoder chunks to look back for decoder cross-attention.
         '''
-        auto_model = AutoModel(model=os.path.join(ROOT, 'model', model_path))
-        self.model = ParaformerStreaming(model=auto_model)
+        self.model = AutoModel(model=os.path.join(ROOT, 'model', model_path))
         self.chunk_size = chunk_size
         self.encoder_chunk_look_back = encoder_chunk_look_back
         self.decoder_chunk_look_back = decoder_chunk_look_back
