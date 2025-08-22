@@ -12,7 +12,9 @@
     <div class="mb-3">
       <!--<p><strong>Local Input (Blue):</strong></p>
       <canvas id="localVisualizer" class="visualizer"></canvas>-->
-      <p class="mt-2">Press the buttons below to start and stop audio processing (TODO).</p>
+      <label for="password" class="form-label">Password</label>
+      <input type="password" class="form-control" id="password" placeholder="Enter the password">
+      <p class="mt-2">Press the buttons below to start and stop.</p>
       <audio id="remoteAudio" autoplay></audio>
       <button id="startButton" class="btn btn-primary" onclick="start()">Start</button>
       <button id="stopButton" class="btn btn-secondary" onclick="stop()">Stop</button>

@@ -10,8 +10,6 @@ import os
 
 load_dotenv()
 
-
-
 def get_ssl_context(args):
     if args.cert_file:
         ssl_context = ssl.SSLContext()

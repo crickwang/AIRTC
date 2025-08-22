@@ -183,7 +183,10 @@ function negotiate() {
         
         return fetch('/offer', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `${document.getElementById("password").value}`
+            },
             body: JSON.stringify({ sdp: offer.sdp, type: offer.type })
         });
     }).then((res) => {

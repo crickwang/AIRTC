@@ -5,6 +5,7 @@ import logging
 import os
 import traceback
 import uuid
+import hashlib
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
@@ -51,7 +52,11 @@ class WebPage:
         """
         Manage WebRTC connection.
         """
-        params = await request.json() 
+        password = request.headers.get('Authorization')
+        if hashlib.sha256(password.encode()).hexdigest() != os.getenv('SECRET_KEY'):
+            return web.Response(status=403)
+
+        params = await request.json()
         # located in js
         offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 

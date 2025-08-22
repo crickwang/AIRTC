@@ -5,6 +5,8 @@ import os
 # Load environment variables and private tokens from .env file
 settings = Settings()
 
+SECRET_KEY = settings.get_env("SECRET_KEY")
+
 # Uncomment and set your Google Cloud credentials if needed
 # Follow google official documentation to set up your credentials
 # [https://cloud.google.com/docs/authentication/getting-started]
