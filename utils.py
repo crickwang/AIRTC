@@ -89,3 +89,30 @@ def log_to_client(dc: RTCDataChannel, msg: str):
             dc.send(log_data)
         except Exception as e:
             print(f"Error sending log to client: {e}")
+            
+import boto3
+from botocore.exceptions import ClientError
+
+
+def get_secret():
+
+    secret_name = "AIRTC"
+    region_name = "us-west-2"
+
+    # Create a Secrets Manager client
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name=region_name
+    )
+
+    try:
+        get_secret_value_response = client.get_secret_value(
+            SecretId=secret_name
+        )
+    except ClientError as e:
+        # For a list of exceptions thrown, see
+        # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
+        raise e
+
+    secret = get_secret_value_response['SecretString']

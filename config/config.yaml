@@ -20,6 +20,10 @@ edge_tts_language: zh-CN
 google_tts_voice: cmn-CN-Chirp3-HD-Puck
 google_tts_language: cmn-CN
 
+GOOGLE_PROJ_ID : low-latency-conversation
+
 azure_tts_voice: zh-CN-YunyangNeural
 azure_tts_region: eastus
 stop_word: 退出
+
+BAIDU_AISTUDIO_BASE_URL : https://aistudio.baidu.com/llm/lmapi/v3

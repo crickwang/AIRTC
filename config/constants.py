@@ -37,11 +37,11 @@ TIMEOUT = 600 # in sec
 WHISPER_ASR_MODEL = settings.get_config("whisper_model")
 WHISPER_LANGUAGE_CODES = settings.get_config("whisper_language_codes", 'zh')
 
-GOOGLE_PROJ_ID = settings.get_env("GOOGLE_PROJ_ID")
+GOOGLE_PROJ_ID = settings.get_config("GOOGLE_PROJ_ID")
 
 SYSTEM_PROMPT = settings.get_config("llm_system_prompt", None)
 LLM_API_KEY = settings.get_env("BAIDU_AISTUDIO_API_KEY")
-LLM_BASE_URL = settings.get_env("BAIDU_AISTUDIO_BASE_URL")
+LLM_BASE_URL = settings.get_config("BAIDU_AISTUDIO_BASE_URL")
 LLM_MODEL = settings.get_config("llm_model")
 MAX_TOKENS = 512
 
