@@ -7,6 +7,14 @@ def get_current_time() -> int:
     return int(round(time.time() * 1000))
 
 def log_to_client(dc: RTCDataChannel, msg: str):
+    """
+    Log a message to the client via the data channel of WebRTC.
+    Args:
+        dc (RTCDataChannel): The data channel to send the log message.
+        msg (str): The log message to send.
+    Exception:
+        If the data channel is not open or an error occurs while sending the log message.
+    """
     if dc and dc.readyState == "open":
         try:
             log_data = json.dumps({"type": "log", "message": msg})

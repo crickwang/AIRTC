@@ -49,8 +49,11 @@ function ensureAudioContext() {
 function createPeerConnection() {
     // Configure RTCPeerConnection
     const config = {
-        iceServers: [],  // Empty for local testing
-        iceCandidatePoolSize: 0
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ],
+        iceCandidatePoolSize: 10
     };
     
     pc = new RTCPeerConnection(config);

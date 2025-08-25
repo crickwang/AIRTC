@@ -10,6 +10,14 @@ from clients.utils import log_to_client
 
 class LLMClient(ABC):
     def __init__(self, model: str, api_key: str, base_url: str, **kwargs):
+        """
+        Initialize the LLM client with the specified model, API key, and base URL.
+        Args:
+            model (str): The model to be used for the LLM.
+            api_key (str): The API key for accessing the LLM.
+            base_url (str): The base URL for the LLM API.
+            **kwargs: Additional keyword arguments.
+        """
         super().__init__()
         self.model = model
         self.api_key = api_key
@@ -24,6 +32,15 @@ class LLMClient(ABC):
         interrupt_event: asyncio.Event,
         **kwargs
     ):
+        """
+        Generate a response from the LLM.
+        Args:
+            input_queue (asyncio.Queue): The input queue containing user messages.
+            output_queue (asyncio.Queue): The output queue for sending responses.
+            stop_event (asyncio.Event): The event to signal stopping the generation.
+            interrupt_event (asyncio.Event): The event to signal interrupting the generation.
+            **kwargs: Additional keyword arguments.
+        """
         pass
 
 @register.add_model("llm", "baidu")

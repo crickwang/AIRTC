@@ -40,6 +40,19 @@ class ASRClient(ABC):
         interrupt_event: asyncio.Event,
         **kwargs,
     ):
+        """
+        Generate a transcription from the audio stream with ASR.
+        Args:
+            track (AudioStreamTrack): Received audio track from WebRTC.
+            output_queue (asyncio.Queue): Queue to send transcription results to LLM.
+            audio_player (AudioStreamTrack): Audio player instance for controlling playback, 
+                                             mainly to enable interruption.
+            stop_event (asyncio.Event): Event to signal when to stop connection 
+                                        and terminate the program.
+            interrupt_event (asyncio.Event): Event to signal when to interrupt other tasks or processes
+                                            as the user interrupts the current audio playback.
+            **kwargs: Additional keyword arguments.
+        """
         pass
 
 # class FunASRParaformer(ASRClient):

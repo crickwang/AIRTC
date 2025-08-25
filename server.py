@@ -60,7 +60,11 @@ class WebPage:
         # located in js
         offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
-        pc = RTCPeerConnection()
+        pc = RTCPeerConnection(configuration={
+            "iceServers": [
+                {"urls": "stun:stun.l.google.com:19302"},
+            ]
+        })
         pc_id = f"PC-{uuid.uuid4().hex[:8]}"
         self.pcs.add(pc)
         pc.log_channel = pc.createDataChannel("log", ordered=True)
