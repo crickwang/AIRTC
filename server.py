@@ -246,8 +246,12 @@ class WebPage:
         app.router.add_get(path=os.path.join("/", "webpage", "js", "client.js"), handler=self.javascript)
         app.router.add_post("/offer", self.offer)
         app.router.add_static("/static/", path=os.path.join(ROOT, "webpage"), show_index=True)
-        web.run_app(app, access_log=None, host=self.args.host, port=self.args.port, ssl_context=ssl_context)
-        
+        if PORT:
+            port = int(PORT)
+        else:
+            port = self.args.port
+        web.run_app(app, access_log=None, host=self.args.host, port=port, ssl_context=ssl_context)
+
     def generate_args(self: object) -> argparse.Namespace:
         """
         Generate command-line arguments for webpage WebRTC

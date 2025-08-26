@@ -975,6 +975,10 @@ class BaiduASR(ASRClient):
     def send_request(self, audio: bytes) -> str:
         """
         Send audio data to the ASR service and return the transcription result.
+        Args:
+            audio (bytes): The audio data to transcribe.
+        Returns:
+            str: The transcription result. None if transcription fails.
         """
         params = {
             "cuid": self.cuid,

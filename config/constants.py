@@ -69,3 +69,5 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 REEXP = r'(?<=[.!?。，,])\s*'
 STOP_WORD = settings.get_config("stop_word", "退出")
 
+PORT = settings.get_env("PORT", None)
+
