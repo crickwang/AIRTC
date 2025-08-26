@@ -1,16 +1,18 @@
-
 version: 1.0
-runtime: python3
+runtime: python311
 build:
   commands:
     build:
+      - echo "Starting build process..."
+      - python --version
+      - pip --version
       - pip install --upgrade pip
       - pip install -r requirements.txt
+      - echo "Build completed successfully"
 run:
   command: python server.py --host 0.0.0.0 --port 8081
   network:
     port: 8081
   secrets:
-    # Your secrets from AWS Secrets Manager
     - name: AIRTC
       value-from: arn:aws:secretsmanager:us-west-2:992382640394:secret:AIRTC-xhoQEq
