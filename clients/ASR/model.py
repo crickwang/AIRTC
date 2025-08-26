@@ -15,6 +15,8 @@ from pywhispercpp.model import Model as whisper_model
 from clients.utils import *
 from config.constants import TIMEOUT, FUN_ASR_MODEL, STREAMING_LIMIT, ROOT
 import os
+import websocket
+import uuid
 
 # ANSI escape sequences for colored output
 # These are used to color the output in the terminal.
@@ -41,7 +43,16 @@ class ASRClient(ABC):
         **kwargs,
     ):
         """
-        Generate a transcription from the audio stream with ASR.
+        Generate a transcription from the audio stream with ASR. \n
+        The workflow of this method is to \n
+        1. Receive audio frames from the WebRTC track. 
+        2. Process the audio frames, generate the transcription, and \
+            put it to the output_queue to send them to the next LLM client.
+        3. Pass in an audio player to signal the interruption on the WebRTC (front end) \
+            track to stop it from generating any audio.
+        4. Use the stop_event to signal when to stop the whole program and terminate everything.
+        5. Use the interrupt_event to signal when to interrupt other clients (back end). \n
+        
         Args:
             track (AudioStreamTrack): Received audio track from WebRTC.
             output_queue (asyncio.Queue): Queue to send transcription results to LLM.
@@ -54,11 +65,6 @@ class ASRClient(ABC):
             **kwargs: Additional keyword arguments.
         """
         pass
-
-# class FunASRParaformer(ASRClient):
-#     def __init__(self, sample_rate, language_code):
-#         super().__init__(sample_rate, language_code)
-#         self.client = FunASRClient()
 
 @register.add_model("asr", "google")
 class GoogleASR(ASRClient):
@@ -359,12 +365,14 @@ class GoogleASR(ASRClient):
         """
         try:
             while not stop_event.is_set():
+                # Receive frame from WebRTC and process it into numpy array
                 frame = await asyncio.wait_for(track.recv(), timeout=timeout)
                 frame = resampler.resample(frame)[0].to_ndarray()
                 frame = np.squeeze(frame, axis=0).astype(np.int16)
                 
                 # Check for speech with VAD
                 if not vad or vad.is_speech(frame):
+                    # New speech detected, interrupt audio playback
                     audio_player.request_interrupt()
                     interrupt_event.set()
 
@@ -381,9 +389,11 @@ class GoogleASR(ASRClient):
                     session_output_queue = queue.Queue(maxsize=1)
                     self.reset()
                     self.init_queue(audio_queue)
+                    # from numpy array to pcm data
                     audio_bytes = frame.tobytes()
                     audio_queue.put(audio_bytes)
 
+                    # Start Google ASR in a separate thread
                     def run_google_stream():
                         """Run Google ASR in separate thread."""
                         try:
@@ -414,6 +424,7 @@ class GoogleASR(ASRClient):
                                 await output_queue.put(None)
                                 asr_thread.join(timeout=0)
                                 break
+                            # if current transcription in ended without interruption
                             if self.last_transcript_was_final:
                                 self.closed = True
                                 asr_thread.join(timeout=5)
@@ -423,7 +434,8 @@ class GoogleASR(ASRClient):
                                     msg = f"ASR: Transcription result - {transcript}"
                                     log_to_client(self.pc.log_channel, msg)
                                 interrupt_event.clear()
-                                break         
+                                break      
+                            # continue to get frame
                             frame = await asyncio.wait_for(track.recv(), timeout=1.0)
                             frame = resampler.resample(frame)[0].to_ndarray()
                             frame = np.squeeze(frame, axis=0).astype(np.int16)
@@ -812,6 +824,333 @@ class FunASR(ASRClient):
             traceback.print_exc()
         finally:
             await output_queue.put(None)
+            
+# WebSocket, outdated. Not working!!!
+@register.add_model("asr", "baiduWS")
+class BaiduWSASR(ASRClient):
+    def __init__(
+        self, 
+        app_id: str, 
+        api_key: str, 
+        dev_pid: str,
+        stop_word: str,
+        uri: str,
+        **kwargs,
+    ) -> None:
+        self.stop_word = stop_word
+        self.app_id = app_id
+        self.api_key = api_key
+        self.dev_pid = dev_pid
+        self.uri = uri
+        self.sample_rate = 16000
+        self.time_per_chunk = 160 / 1000 # in seconds
+        self.format = "pcm"
+        # Nothing in this websocket makes sense. Even WebSocketApp class
+        # does not exist in this package. It's a 6!!! years old documentation.
+        self.ws_app = websocket.WebSocketApp(
+            self.uri,
+            on_open=self.on_open,
+            on_message=self.on_message,
+            on_error=self.on_error,
+            on_close=self.on_close,
+        )
+        self.ws_app.run_forever()
+
+    async def generate(
+        self, 
+        track: AudioStreamTrack,
+        audio_queue: asyncio.Queue,
+        output_queue: asyncio.Queue,
+        audio_player: AudioStreamTrack,
+        stop_event: asyncio.Event,
+        interrupt_event: asyncio.Event,
+        ws: websocket.WebSocket,
+        vad: VAD = None,
+        timeout: float = TIMEOUT,
+        resampler: AudioResampler = None,
+        **kwargs,
+    ) -> str:
+        """
+        Baidu ASR transcription
+        Args:
+            track (AudioStreamTrack): Received audio track from WebRTC.
+            output_queue (asyncio.Queue): Queue to send transcription results to LLM.
+            audio_player (AudioStreamTrack): Audio player instance for controlling playback, 
+                                             mainly to enable interruption.
+            stop_event (asyncio.Event): Event to signal when to stop connection 
+                                        and terminate the program.
+            interrupt_event (asyncio.Event): Event to signal when to interrupt other tasks or processes
+                                            as the user interrupts the current audio playback.
+            vad (VAD, optional): Voice activity detector instance for detecting speech. This VAD instance
+                            can be customized on your own, but it must contain a is_speech(frame) 
+                            method that returns a boolean given a np.ndarray frame,
+                            distinguishing between speech and silence. If not provided, defaults to None,
+                            and every frame will be passed through ASR. Default VAD is None.
+            timeout (float, optional): Timeout for ASR. Defaults to 600 seconds.
+            resampler (AudioResampler, optional): Audio resampler instance for resampling audio frames.
+                                                   If not provided, defaults to None.
+        Returns:
+            None    
+        Raises:
+            TimeoutError: If the operation times out.
+        """
+
+    async def on_open(
+        self, 
+        track: AudioStreamTrack,
+        audio_queue: asyncio.Queue,
+        output_queue: asyncio.Queue,
+        audio_player: AudioStreamTrack,
+        stop_event: asyncio.Event,
+        interrupt_event: asyncio.Event,
+        ws: websocket.WebSocket,
+        vad: VAD = None,
+        timeout: float = TIMEOUT,
+        resampler: AudioResampler = None,
+        **kwargs,
+    ) -> str:
+        """
+        Baidu ASR transcription
+        Args:
+            track (AudioStreamTrack): Received audio track from WebRTC.
+            output_queue (asyncio.Queue): Queue to send transcription results to LLM.
+            audio_player (AudioStreamTrack): Audio player instance for controlling playback, 
+                                             mainly to enable interruption.
+            stop_event (asyncio.Event): Event to signal when to stop connection 
+                                        and terminate the program.
+            interrupt_event (asyncio.Event): Event to signal when to interrupt other tasks or processes
+                                            as the user interrupts the current audio playback.
+            vad (VAD, optional): Voice activity detector instance for detecting speech. This VAD instance
+                            can be customized on your own, but it must contain a is_speech(frame) 
+                            method that returns a boolean given a np.ndarray frame,
+                            distinguishing between speech and silence. If not provided, defaults to None,
+                            and every frame will be passed through ASR. Default VAD is None.
+            timeout (float, optional): Timeout for ASR. Defaults to 600 seconds.
+            resampler (AudioResampler, optional): Audio resampler instance for resampling audio frames.
+                                                   If not provided, defaults to None.
+        Returns:
+            None    
+        Raises:
+            TimeoutError: If the operation times out.
+        """
+        try:
+            while not stop_event.is_set():
+                frame = await asyncio.wait_for(track.recv(), timeout=timeout)
+                self.send_start_params(ws)
+                frame = resampler.resample(frame)[0].to_ndarray()
+                frame = np.squeeze(frame, axis=0).astype(np.int16)
+                
+                # Check for speech with VAD
+                if not vad or vad.is_speech(frame):
+                    audio_player.request_interrupt()
+                    interrupt_event.set()
+
+                    msg = f"ASR: Speech detected - starting transcription"
+                    print(msg)
+                    if self.pc:
+                        log_to_client(self.pc.log_channel, msg)
+
+                    # queue that contains pcm data, feed into google STT API
+                    # wrapped in AudioStream instance
+                    audio_queue = queue.Queue()
+                    # queue that connects inner STT transcription thread with the main thread
+                    # that receives audio from WebRTC
+                    session_output_queue = queue.Queue(maxsize=1)
+                    self.reset()
+                    self.init_queue(audio_queue)
+                    audio_bytes = frame.tobytes()
+                    audio_queue.put(audio_bytes)
+
+                    async def run_baidu_stream():
+                        """Run Baidu ASR in separate thread."""
+                        try:
+                            while True:
+                                pcm = b''
+                                while len(pcm) < self.time_per_chunk:
+                                    pcm += audio_queue.get(block=True, timeout=1)
+                                self.send_audio(ws, pcm)
+                        except queue.Empty:
+                            pass
+                        except Exception as e:
+                            msg = f"ASR thread error: {e}"
+                            print(msg)
+                            if self.pc:
+                                log_to_client(self.pc.log_channel, msg)
+
+                    asr_thread = threading.Thread(target=run_baidu_stream, daemon=True)
+                    asr_thread.start()
+                    
+                    # Continue collecting audio until speech ends
+                    while True:
+                        silence_count = 0
+                        try:
+                            if not vad.is_speech(frame):
+                                silence_count += 1
+                            else:
+                                silence_count = 0
+                            if stop_event.is_set():
+                                await output_queue.put(None)
+                                asr_thread.join(timeout=0)
+                                self.send_cancel(ws)
+                                break
+                            if silence_count > 100:
+                                asr_thread.join(timeout=5)
+                                self.send_finish(ws)
+                                time.sleep(1)
+                                transcript = self.on_message(ws, None)
+                                if self.stop_word and self.stop_word == transcript:
+                                    msg = "Stop word triggered, exiting the program"
+                                    print(msg)
+                                    if self.pc:
+                                        log_to_client(self.pc.log_channel, msg)
+                                    stop_event.set()
+                                await output_queue.put(transcript)
+                                if self.pc and transcript:
+                                    msg = f"ASR: Transcription result - {transcript}"
+                                    log_to_client(self.pc.log_channel, msg)
+                                interrupt_event.clear()
+                                break         
+                            frame = await asyncio.wait_for(track.recv(), timeout=1.0)
+                            frame = resampler.resample(frame)[0].to_ndarray()
+                            frame = np.squeeze(frame, axis=0).astype(np.int16)
+                            audio_bytes = frame.tobytes()
+                            audio_queue.put(audio_bytes)
+                                
+                        except asyncio.TimeoutError:
+                            msg = "ASR: Timeout waiting for more audio"
+                            print(msg)
+                            if self.pc:
+                                log_to_client(self.pc.log_channel, msg)
+                            self.closed = True
+                            break
+        except asyncio.TimeoutError:
+            msg = f"ASR: User inactive for {timeout} seconds"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
+        except Exception as e:
+            msg = f"ASR: Error: {e}"
+            print(msg)
+            if self.pc:
+                log_to_client(self.pc.log_channel, msg)
+            traceback.print_exc()
+        finally:
+            await output_queue.put(None)
+        
+
+    def send_start_params(self, ws:websocket.WebSocket):
+        """
+        开始参数帧
+        :param websocket.WebSocket ws:
+        :return:
+        """
+        req = {
+            "type": "START",
+            "data": {
+                "appid": self.app_id,  # 网页上的appid
+                "appkey": self.api_key,  # 网页上的appid对应的appkey
+                "dev_pid": self.dev_pid,  # 识别模型
+                "cuid": "0",  # 随便填不影响使用。机器的mac或者其它唯一id，百度计算UV用。
+                "sample": self.sample_rate,  # 固定参数
+                "format": self.format  # 固定参数
+            }
+        }
+        body = json.dumps(req)
+        ws.send(body, websocket.ABNF.OPCODE_TEXT)
+
+    def send_audio(self, ws:websocket.WebSocket, pcm):
+        """
+        发送二进制音频数据，注意每个帧之间需要有间隔时间
+        :param  websocket.WebSocket ws:
+        :return:
+        """
+
+        chunk_len = int(self.sample_rate * 2 / self.time_per_chunk)
+
+        index = 0
+        total = len(pcm)
+        while index < total:
+            end = index + chunk_len
+            if end >= total:
+                # 最后一个音频数据帧
+                end = total
+            body = pcm[index:end]
+            ws.send(body, websocket.ABNF.OPCODE_BINARY)
+            index = end
+            time.sleep(self.time_per_chunk)  # ws.send 也有点耗时，这里没有计算
+
+
+    def send_finish(self, ws:websocket.WebSocket):
+        """
+        发送结束帧
+        :param websocket.WebSocket ws:
+        :return:
+        """
+        req = {
+            "type": "FINISH"
+        }
+        body = json.dumps(req)
+        ws.send(body, websocket.ABNF.OPCODE_TEXT)
+
+    def send_cancel(self, ws:websocket.WebSocket):
+        """
+        发送取消帧
+        :param websocket.WebSocket ws:
+        :return:
+        """
+        req = {
+            "type": "CANCEL"
+        }
+        body = json.dumps(req)
+        ws.send(body, websocket.ABNF.OPCODE_TEXT)
+
+    def on_open(self, ws:websocket.WebSocket):
+        """
+        连接后发送数据帧
+        :param  websocket.WebSocket ws:
+        :return:
+        """
+
+        def run(*args):
+            """
+            发送数据帧
+            :param args:
+            :return:
+            """
+            self.send_start_params(ws)
+            self.send_audio(ws)
+            self.send_finish(ws)
+        threading.Thread(target=run).start()
+
+
+    def on_message(self, ws:websocket.WebSocket, message):
+        """
+        接收服务端返回的消息
+        :param ws:
+        :param message: json格式，自行解析
+        :return:
+        """
+        print(message)
+        return message
+
+
+    def on_error(self, ws:websocket.WebSocket, error):
+        """
+        库的报错，比如连接超时
+        :param ws:
+        :param error: json格式，自行解析
+        :return:
+            """
+        print(str(error))
+
+
+    def on_close(self, ws:websocket.WebSocket):
+        """
+        Websocket关闭
+        :param websocket.WebSocket ws:
+        :return:
+        """
+        print("### closed ###")
 
 class ASRClientFactory:
     @staticmethod

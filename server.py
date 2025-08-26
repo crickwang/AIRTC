@@ -57,17 +57,21 @@ class WebPage:
             return web.Response(status=403)
 
         params = await request.json()
+        processing_mode = params.get("processingMode", "local")
         # located in js
         offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
-
-        pc = RTCPeerConnection(configuration={
-            "iceServers": [
-                {"urls": "stun:stun.l.google.com:19302"},
-            ]
-        })
+        if processing_mode == "local":
+            pc = RTCPeerConnection()
+        else:
+            pc = RTCPeerConnection(configuration={
+                "iceServers": [
+                    {"urls": "stun:stun.l.google.com:19302"},
+                ]
+            })
         pc_id = f"PC-{uuid.uuid4().hex[:8]}"
         self.pcs.add(pc)
-        pc.log_channel = pc.createDataChannel("log", ordered=True)
+        log_channel = pc.createDataChannel("log", ordered=True)
+        pc.log_channel = log_channel
         print(f"Current {pc_id}: New connection established")
 
         # Create session-specific queues
@@ -93,6 +97,7 @@ class WebPage:
                             self.args.vad, 
                             threshold=VAD_THRESHOLD,
                             )
+        # some ASR may require different sample rate!
         resampler = AudioResampler(rate=ASR_SAMPLE_RATE, 
                                    layout=LAYOUT, 
                                    format=FORMAT,

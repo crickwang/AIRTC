@@ -33,6 +33,14 @@ ASR_DECODER_CHUNK_LOOK_BACK = 1
 VAD_THRESHOLD = 1500  # Voice Activity Detection threshold
 TIMEOUT = 600 # in sec
 
+BAIDU_APP_ID = settings.get_env("BAIDU_APP_ID")
+BAIDU_API_KEY = settings.get_env("BAIDU_API_KEY")
+BAIDU_SECRET_KEY = settings.get_env("BAIDU_SECRET_KEY")
+BAIDU_ACCESS_TOKEN = settings.get_env("BAIDU_ACCESS_TOKEN")
+BAIDU_DEV_PID = settings.get_config("baidu_dev_pid")
+BAIDU_URI = settings.get_config("baidu_uri")
+BAIDU_ASR_SAMPLE_RATE = 16000
+
 # Whisper use different language codes
 WHISPER_ASR_MODEL = settings.get_config("whisper_model")
 WHISPER_LANGUAGE_CODES = settings.get_config("whisper_language_codes", 'zh')

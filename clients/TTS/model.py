@@ -28,7 +28,24 @@ class TTSClient(ABC):
         stop_event: asyncio.Event,
         interrupt_event: asyncio.Event,
         **kwargs
-        ):
+    ):
+        """
+        Generate speech from text using the TTS service.
+        The workflow of this method is to: \n
+        1. Receive LLM-generated text from the input queue.
+        2. Process the text and generate speech.
+        3. Send the speech to the output queue.
+        4. Use the stop_event to signal when to terminate the program.
+        5. Use the interrupt_event to signal when to interrupt other clients.
+        
+        Args:
+            self (object): The TTS client instance.
+            input_queue (asyncio.Queue): The input queue containing LLM-generated text.
+            output_queue (asyncio.Queue): The output queue for sending audio chunks.
+            stop_event (asyncio.Event): The event to signal stopping the generation.
+            interrupt_event (asyncio.Event): The event to signal interrupting the TTS.
+            **kwargs: Additional keyword arguments.
+        """
         pass
   
 @register.add_model("tts", "azure")

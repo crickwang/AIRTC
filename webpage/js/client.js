@@ -46,15 +46,19 @@ function ensureAudioContext() {
     return audioContext;
 }
 
-function createPeerConnection() {
-    // Configure RTCPeerConnection
+function createPeerConnection(mode = 'local') {
     const config = {
-        iceServers: [
+        iceServers: [],  // Empty for local
+        iceCandidatePoolSize: 0
+    };
+
+    if (mode === 'online') {
+        config.iceServers = [
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' }
-        ],
-        iceCandidatePoolSize: 10
-    };
+        ];
+        config.iceCandidatePoolSize = 10;
+    }
     
     pc = new RTCPeerConnection(config);
 
@@ -251,7 +255,8 @@ function negotiate() {
         });
     }).then(() => {
         const offer = pc.localDescription;
-        console.log("Sending offer to server");
+        const processingMode = getProcessingMode();
+        console.log("Sending offer to server with processing mode:", processingMode);
         
         return fetch('/offer', {
             method: 'POST',
@@ -259,7 +264,11 @@ function negotiate() {
                 'Content-Type': 'application/json',
                 'Authorization': `${document.getElementById("password").value}`
             },
-            body: JSON.stringify({ sdp: offer.sdp, type: offer.type })
+            body: JSON.stringify({ 
+                sdp: offer.sdp, 
+                type: offer.type,
+                processingMode: processingMode
+            })
         });
     }).then((res) => {
         if (!res.ok) {
@@ -279,6 +288,10 @@ function negotiate() {
 function start() {
     console.log("Starting WebRTC connection...");
     
+    // Get the selected processing mode
+    const processingMode = getProcessingMode();
+    addLogMessage(`Starting with ${processingMode} processing mode`, 'info');
+    
     // Ensure audio context is created on user interaction
     ensureAudioContext();
     
@@ -286,7 +299,7 @@ function start() {
         stop();
     }
     
-    pc = createPeerConnection();
+    pc = createPeerConnection(processingMode);
 
     // Audio constraints that match your server
     const constraints = {
@@ -392,3 +405,9 @@ function getAudioContextInfo() {
 
 // Make debugging function available globally
 window.getAudioContextInfo = getAudioContextInfo;
+
+// Function to get the selected processing mode
+function getProcessingMode() {
+    const selectedOption = document.querySelector('input[name="processingMode"]:checked');
+    return selectedOption ? selectedOption.value : 'local'; // default to local
+}

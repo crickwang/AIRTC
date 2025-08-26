@@ -27,3 +27,5 @@ azure_tts_region: eastus
 stop_word: 退出
 
 BAIDU_AISTUDIO_BASE_URL : https://aistudio.baidu.com/llm/lmapi/v3
+baidu_dev_pid: 1536
+baidu_uri: wss://vop.baidu.com/realtime_asr?sn=

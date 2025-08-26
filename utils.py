@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 import os
 import json
 from aiortc import RTCDataChannel
+# import boto3
+# from botocore.exceptions import ClientError
 
 load_dotenv()
 
@@ -20,6 +22,14 @@ def get_ssl_context(args):
     return None
 
 def create_client(model_type, platform, **kwargs):
+    """
+    Create a client (ASR, LLM, TTS, VAD) for the specified model type and platform.
+    Args:
+        model_type (str): The type of model (one of 'asr', 'llm', 'tts', 'vad').
+        platform (str): The platform for the model (e.g., "baidu", "google").
+                        See the register to get all possible platforms.
+        **kwargs: Additional keyword arguments for client initialization.
+    """
     try:
         if model_type == "asr":
             return ASRClientFactory.create(platform, **kwargs)
@@ -46,6 +56,7 @@ def baidu():
         'Accept': 'application/json'
     }
     response = requests.request("POST", url, headers=headers, data=payload)
+    print(response.json()['access_token'])
     return response.json()['access_token']
 
 import os
@@ -83,19 +94,20 @@ def create_recognizer(recognizer_id: str) -> cloud_speech.Recognizer:
     return recognizer
 
 def log_to_client(dc: RTCDataChannel, msg: str):
+    """
+    Log a message to the WebRTC data channel.
+    Args:
+        dc (RTCDataChannel): The WebRTC data channel.
+        msg (str): The message to log.
+    """
     if dc and dc.readyState == "open":
         try:
             log_data = json.dumps({"type": "log", "message": msg})
             dc.send(log_data)
         except Exception as e:
             print(f"Error sending log to client: {e}")
-            
-import boto3
-from botocore.exceptions import ClientError
-
 
 def get_secret():
-
     secret_name = "AIRTC"
     region_name = "us-west-2"
 
@@ -116,3 +128,6 @@ def get_secret():
         raise e
 
     secret = get_secret_value_response['SecretString']
+
+if __name__ == "__main__":
+    baidu()

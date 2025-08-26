@@ -18,6 +18,25 @@
       <audio id="remoteAudio" autoplay></audio>
       <button id="startButton" class="btn btn-primary" onclick="start()">Start</button>
       <button id="stopButton" class="btn btn-secondary" onclick="stop()">Stop</button>
+      
+      <!-- Choice section for Local vs Online options -->
+      <div class="mt-4 mb-3">
+        <h5>Choose Processing Mode:</h5>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="processingMode" id="localOption" value="local" checked>
+          <label class="form-check-label" for="localOption">
+            Local Processing
+          </label>
+          <small class="form-text text-muted d-block">Process audio/speech locally on your device</small>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="processingMode" id="onlineOption" value="online">
+          <label class="form-check-label" for="onlineOption">
+            Online Processing
+          </label>
+          <small class="form-text text-muted d-block">Process audio/speech online (not implemented)</small>
+        </div>
+      </div>
     </div>
     <div class="logs-section">
       <div class="logs-header">

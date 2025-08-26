@@ -34,8 +34,14 @@ class LLMClient(ABC):
     ):
         """
         Generate a response from the LLM.
+        The workflow of this method is to \n
+        1. Receive transcription results from the input queue.
+        2. Process the transcription results and generate a response.
+        3. Send the response to the output queue.
+        4. Use the stop_event to signal when to terminate the program.
+        5. Use the interrupt_event to signal when to interrupt other clients.
         Args:
-            input_queue (asyncio.Queue): The input queue containing user messages.
+            input_queue (asyncio.Queue): The input queue containing transcription results.
             output_queue (asyncio.Queue): The output queue for sending responses.
             stop_event (asyncio.Event): The event to signal stopping the generation.
             interrupt_event (asyncio.Event): The event to signal interrupting the generation.
