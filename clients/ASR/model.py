@@ -1151,6 +1151,63 @@ class BaiduWSASR(ASRClient):
         :return:
         """
         print("### closed ###")
+        
+@register.add_model("asr", "baidu")
+class BaiduASR(ASRClient):
+    def __init__(
+        self, 
+        app_id: str, 
+        api_key: str, 
+        secret_key: str,
+        dev_pid: str,
+        stop_word: str = None,
+        **kwargs,
+    ) -> None:
+        """
+        Initialize Baidu ASR client.
+        Args:
+            app_id (str): Baidu app id.
+            api_key (str): Baidu api key.
+            secret_key (str): Baidu secret key.
+            dev_pid (str): Baidu dev pid.
+            stop_word (str, optional): Stop word to terminate the program. Defaults to None.
+        """
+        self.client = AipSpeech(app_id, api_key, secret_key)
+        self.dev_pid = dev_pid
+        self.stop_word = stop_word
+        self.pc = kwargs.get('pc', None)
+
+    async def generate(
+        self, 
+        track: AudioStreamTrack, 
+        output_queue: asyncio.Queue,
+        audio_player: AudioStreamTrack,
+        stop_event: asyncio.Event, 
+        interrupt_event: asyncio.Event,
+        vad: VAD = None,
+        timeout: float = TIMEOUT,
+        resampler: AudioResampler = None,
+        **kwargs,
+    ) -> None:
+        """
+        Baidu ASR transcription
+        Args:
+            track (AudioStreamTrack): Received audio track from WebRTC.
+            output_queue (asyncio.Queue): Queue to send transcription results to LLM.
+            audio_player (AudioStreamTrack): Audio player instance for controlling playback, 
+                                             mainly to enable interruption.
+            stop_event (asyncio.Event): Event to signal when to stop connection 
+                                        and terminate the program.
+            interrupt_event (asyncio.Event): Event to signal when to interrupt other tasks or processes
+                                            as the user interrupts the current audio playback.
+            vad (VAD, optional): Voice activity detector instance for detecting speech. This VAD instance
+                            can be customized on your own, but it must contain a is_speech(frame) 
+                            method that returns a boolean given a np.ndarray frame,
+                            distinguishing between speech and silence. If not provided, defaults to None,
+                            and every frame will be passed through ASR.
+            timeout (float, optional): Timeout for ASR. Defaults to 600 seconds.
+            resampler (AudioResampler, optional): Audio resampler instance for resampling audio frames.
+                                                   If not
 
 class ASRClientFactory:
     @staticmethod
