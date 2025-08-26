@@ -23,7 +23,7 @@ CHANNELS = 1
 FORMAT = "s16"
 LAYOUT = "mono"  # Audio layout, mono or stereo
 SILENCE_TIME = 1  # in seconds
-SILENCE_CHUNK = 5
+SILENCE_CHUNK = 50
 STREAMING_LIMIT = 60000  # 1 minute, in ms
 
 # Constants for local ASR 

@@ -98,15 +98,15 @@ class WebPage:
                             threshold=VAD_THRESHOLD,
                             )
         # some ASR may require different sample rate!
-        resampler = AudioResampler(rate=ASR_SAMPLE_RATE, 
+        resampler = AudioResampler(rate=BAIDU_ASR_SAMPLE_RATE, 
                                    layout=LAYOUT, 
                                    format=FORMAT,
                                   )
         asr_client = create_client("asr", 
                                    platform=self.args.asr, 
-                                   rate=ASR_SAMPLE_RATE, 
-                                   language_code=ASR_LANGUAGE, 
-                                   chunk_size=ASR_CHUNK_SIZE,
+                                   access_token=BAIDU_ACCESS_TOKEN,
+                                   dev_pid=BAIDU_DEV_PID,
+                                   uri=BAIDU_URI,
                                    stop_word=STOP_WORD,
                                    pc=pc,
                                    )
