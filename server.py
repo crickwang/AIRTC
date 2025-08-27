@@ -7,7 +7,7 @@ import traceback
 import uuid
 import hashlib
 from aiohttp import web
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel, RTCIceServer
 from aiortc.contrib.media import MediaBlackhole
 from av.audio.resampler import AudioResampler
 from config.constants import *
@@ -70,7 +70,7 @@ class WebPage:
             })
         pc_id = f"PC-{uuid.uuid4().hex[:8]}"
         self.pcs.add(pc)
-        log_channel = pc.createDataChannel("log", ordered=True)
+        log_channel = pc.createDataChannel("log")
         pc.log_channel = log_channel
         print(f"Current {pc_id}: New connection established")
 
@@ -98,16 +98,15 @@ class WebPage:
                             threshold=VAD_THRESHOLD,
                             )
         # some ASR may require different sample rate!
-        resampler = AudioResampler(rate=BAIDU_ASR_SAMPLE_RATE, 
+        resampler = AudioResampler(rate=ASR_SAMPLE_RATE, 
                                    layout=LAYOUT, 
                                    format=FORMAT,
                                   )
         asr_client = create_client("asr", 
                                    platform=self.args.asr, 
-                                   access_token=BAIDU_ACCESS_TOKEN,
-                                   dev_pid=BAIDU_DEV_PID,
-                                   uri=BAIDU_URI,
-                                   stop_word=STOP_WORD,
+                                   rate=ASR_SAMPLE_RATE,
+                                   language_code=ASR_LANGUAGE,
+                                   chunk_size=ASR_CHUNK_SIZE,
                                    pc=pc,
                                    )
         llm_client = create_client("llm", 
@@ -131,9 +130,9 @@ class WebPage:
         async def on_connectionstatechange():
             print(f"Current {pc_id}: Connection state: {pc.connectionState}")
             if pc.connectionState == 'connected':
-                msg = '=' * 50 + "\nStart Recording\n" + '=' * 50
+                msg = '=' * 20 + "\nStart Recording\n" + '=' * 20
                 print(msg)
-                log_to_client(pc.log_channel, msg)
+                log_to_client(pc.log_channel, "Start Recording")
             if pc.connectionState in ['closed', 'failed', 'disconnected']:
                 # Cancel all tasks
                 if hasattr(pc, '_stop_event'):

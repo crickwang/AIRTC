@@ -97,6 +97,11 @@ function createPeerConnection(mode = 'local') {
         if (["disconnected", "failed", "closed"].includes(pc.connectionState)) {
             stop();
         }
+
+        if (pc.connectionState === "connected") {
+            const temp_str = "=".repeat(20) + "Start Speaking" + "=".repeat(20);
+            addLogMessage("WebRTC connection established, \n" + temp_str, 'client');
+        }
     };
 
     pc.ondatachannel = function(event) {

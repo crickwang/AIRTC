@@ -100,7 +100,8 @@ def log_to_client(dc: RTCDataChannel, msg: str):
         dc (RTCDataChannel): The WebRTC data channel.
         msg (str): The message to log.
     """
-    if dc and dc.readyState == "open":
+    print("get message", msg, dc.readyState)
+    if dc and (dc.readyState == "open"):
         try:
             log_data = json.dumps({"type": "log", "message": msg})
             dc.send(log_data)
