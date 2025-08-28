@@ -66,7 +66,12 @@ class WebPage:
         else:
             pc = RTCPeerConnection(configuration=RTCConfiguration(
                     iceServers=[
-                        RTCIceServer(urls=["stun:stun.l.google.com:19302"])
+                        RTCIceServer(urls=["stun:stun.qq.com:3478",
+                                           "stun:stun.l.google.com:19302",
+                                           "stun:stun1.l.google.com:19302",
+                                           "stun:stun2.l.google.com:19302",
+                                           "stun:stun3.l.google.com:19302",
+                                           "stun:stun4.l.google.com:19302",])
                     ]
                 )
             )
@@ -132,9 +137,9 @@ class WebPage:
         async def on_connectionstatechange():
             print(f"Current {pc_id}: Connection state: {pc.connectionState}")
             if pc.connectionState == 'connected':
-                msg = '=' * 20 + "\nStart Recording\n" + '=' * 20
+                msg = '=' * 50 + "\nStart Recording\n" + '=' * 50
                 print(msg)
-                log_to_client(pc.log_channel, "Start Recording")
+                log_to_client(pc.log_channel, msg)
             if pc.connectionState in ['closed', 'failed', 'disconnected']:
                 # Cancel all tasks
                 if hasattr(pc, '_stop_event'):

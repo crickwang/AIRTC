@@ -54,8 +54,12 @@ function createPeerConnection(mode = 'local') {
 
     if (mode === 'online') {
         config.iceServers = [
+            { urls: 'stun:stun.qq.com:3478' },
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' }
         ];
         config.iceCandidatePoolSize = 10;
     }
@@ -99,8 +103,7 @@ function createPeerConnection(mode = 'local') {
         }
 
         if (pc.connectionState === "connected") {
-            const temp_str = "=".repeat(20) + "\nStart Speaking\n" + "=".repeat(20);
-            addLogMessage("WebRTC connection established,\n" + temp_str, 'client');
+            addLogMessage("WebRTC connection established, Start Speaking", 'client');
         }
     };
 

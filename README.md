@@ -1,5 +1,7 @@
 # <center> AIRTC </center>
 
+([简体中文](./README_zh.md) | English)
+
 ## Summary
 AIRTC is a high-performance, real-time communication framework designed for low-latency audio streaming. It leverages advanced LLM technologies to provide a seamless communication experience AI and human.
 
@@ -105,3 +107,30 @@ To set up the client for AIRTC, you may follow these steps:
    ```
    export BAIDU_ACCESS_TOKEN=<your_access_token>
    ```
+
+   5. Pass in the parameters accordingly. 
+
+- **Baidu LLM**
+   1. Goto [Baidu AI Studio](https://aistudio.baidu.com/overview),
+   and create an API key
+
+   2. Select the appropriate model (open source?) of your own.
+
+   3. Pass in the parameters accordingly.
+
+- **Azure TTS**
+   1. Go to [Azure Portal](https://portal.azure.com/) and create an account.
+   2. Create a new Speech service resource.
+   3. Get your API key and endpoint URL from the Azure portal.
+   4. Set the following environment variables:
+      ```
+      export AZURE_API_KEY=<your_api_key>
+      export AZURE_ENDPOINT=<your_endpoint_url>
+      ```
+   5. Pass in the parameters accordingly.
+
+- **Edge TTS**
+   This is an open source model, the only requirement is to pass in a voice.
+
+- **Google TTS**
+   Similar to Google's ASR service, there is no need to set any parameters after gcloud and environment variables are set. 

@@ -363,6 +363,7 @@ class AzureTTS(TTSClient):
             await output_queue.put(chunk)
             await asyncio.sleep(0.001)
 
+@register.add_model("tts", "edge")
 class EdgeTTS(TTSClient):
     def __init__(
         self: object, 
@@ -565,7 +566,8 @@ class EdgeTTS(TTSClient):
 
             await output_queue.put(chunk)
             await asyncio.sleep(0.001)
-            
+    
+@register.add_model("tts", "google")        
 class GoogleTTS(TTSClient):
     def __init__(self, voice: str, language: str):
         """
