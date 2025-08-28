@@ -99,8 +99,8 @@ function createPeerConnection(mode = 'local') {
         }
 
         if (pc.connectionState === "connected") {
-            const temp_str = "=".repeat(20) + "Start Speaking" + "=".repeat(20);
-            addLogMessage("WebRTC connection established, \n" + temp_str, 'client');
+            const temp_str = "=".repeat(20) + "\nStart Speaking\n" + "=".repeat(20);
+            addLogMessage("WebRTC connection established,\n" + temp_str, 'client');
         }
     };
 

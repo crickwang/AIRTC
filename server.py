@@ -7,7 +7,8 @@ import traceback
 import uuid
 import hashlib
 from aiohttp import web
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel, RTCIceServer
+from aiortc import RTCPeerConnection, RTCSessionDescription, \
+                   RTCDataChannel, RTCIceServer, RTCConfiguration
 from aiortc.contrib.media import MediaBlackhole
 from av.audio.resampler import AudioResampler
 from config.constants import *
@@ -63,11 +64,12 @@ class WebPage:
         if processing_mode == "local":
             pc = RTCPeerConnection()
         else:
-            pc = RTCPeerConnection(configuration={
-                "iceServers": [
-                    {"urls": "stun:stun.l.google.com:19302"},
-                ]
-            })
+            pc = RTCPeerConnection(configuration=RTCConfiguration(
+                    iceServers=[
+                        RTCIceServer(urls=["stun:stun.l.google.com:19302"])
+                    ]
+                )
+            )
         pc_id = f"PC-{uuid.uuid4().hex[:8]}"
         self.pcs.add(pc)
         log_channel = pc.createDataChannel("log")
