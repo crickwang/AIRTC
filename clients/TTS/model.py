@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from email.mime import text
 import azure.cognitiveservices.speech as speechsdk
 import edge_tts.submaker as submaker
 import edge_tts.communicate as communicate

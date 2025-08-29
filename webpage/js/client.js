@@ -102,7 +102,7 @@ function createPeerConnection(mode = 'local') {
             stop();
         }
 
-        if (pc.connectionState === "connected") {
+        else if (pc.connectionState === "connected") {
             addLogMessage("WebRTC connection established, Start Speaking", 'client');
         }
     };

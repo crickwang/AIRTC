@@ -503,6 +503,7 @@ class WhisperASR(ASRClient):
         vad: VAD = None,
         timeout: float = TIMEOUT,
         resampler: AudioResampler = None,
+        max_silence_chunk: int = 50,
         **kwargs,
     ) -> None:
         """
@@ -609,7 +610,7 @@ class WhisperASR(ASRClient):
                                 await output_queue.put(None)
                                 asr_thread.join(timeout=0)
                                 break
-                            if silence_count > 100:
+                            if silence_count > max_silence_chunk:
                                 self.closed = True
                                 asr_thread.join(timeout=10)
                                 transcript = session_output_queue.get_nowait() if not session_output_queue.empty() else None
@@ -690,6 +691,7 @@ class FunASR(ASRClient):
         vad: VAD = None,
         timeout: float = TIMEOUT,
         resampler: AudioResampler = None,
+        max_silence_chunk: int = 50,
         **kwargs,
     ) -> None:
         """
@@ -790,7 +792,7 @@ class FunASR(ASRClient):
                                 await output_queue.put(None)
                                 asr_thread.join(timeout=0)
                                 break
-                            if silence_count > 100:
+                            if silence_count > max_silence_chunk:
                                 self.closed = True
                                 asr_thread.join(timeout=10)
                                 transcript = session_output_queue.get_nowait() if not session_output_queue.empty() else None
@@ -868,6 +870,7 @@ class BaiduASR(ASRClient):
         vad: VAD = None,
         timeout: float = TIMEOUT,
         resampler: AudioResampler = None,
+        max_silence_chunk: int = 50,
         **kwargs,
     ) -> None:
         """
@@ -927,7 +930,7 @@ class BaiduASR(ASRClient):
                                 await output_queue.put(None)
                                 break
                             # if current transcription in ended without interruption
-                            if silence_count > 50:
+                            if silence_count > max_silence_chunk:
                                 self.closed = True
                                 transcript = self.send_request(audio)
                                 if transcript is None:
