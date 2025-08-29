@@ -6,7 +6,7 @@ def get_current_time() -> int:
     """Get the current time in milliseconds."""
     return int(round(time.time() * 1000))
 
-def log_to_client(dc: RTCDataChannel, msg: str):
+def server_to_client(dc: RTCDataChannel, msg: str):
     """
     Log a message to the client via the data channel of WebRTC.
     Args:

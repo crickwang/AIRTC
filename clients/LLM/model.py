@@ -6,7 +6,7 @@ import traceback
 import unicodedata as ucd
 from register import register
 from config.constants import TIMEOUT
-from clients.utils import log_to_client
+from clients.utils import server_to_client
 
 class LLMClient(ABC):
     def __init__(self, model: str, api_key: str, base_url: str, **kwargs):
@@ -97,7 +97,7 @@ class BaiduLLM(LLMClient):
             msg = f"LLM: Error connecting to Baidu LLM API: {e}"
             print(msg)
             if self.pc:
-                log_to_client(self.pc.log_channel, msg)
+                server_to_client(self.pc.log_channel, msg)
 
     def message(
         self: object, 
@@ -250,7 +250,7 @@ class BaiduLLM(LLMClient):
                                 msg = f"LLM: Sending text into TTS: '{temp_text}'"
                                 print(msg)
                                 if self.pc:
-                                    log_to_client(self.pc.log_channel, msg)
+                                    server_to_client(self.pc.log_channel, msg)
                                 await output_queue.put(temp_text)
                                 prev = i + 1
                             else:
@@ -272,7 +272,7 @@ class BaiduLLM(LLMClient):
             msg = f"LLM: Error: {e}"
             print(msg)
             if self.pc:
-                log_to_client(self.pc.log_channel, msg)
+                server_to_client(self.pc.log_channel, msg)
             traceback.print_exc()
         finally:
             # Always send end marker
@@ -280,7 +280,7 @@ class BaiduLLM(LLMClient):
             msg = "LLM: end of processing"
             print(msg)
             if self.pc:
-                log_to_client(self.pc.log_channel, msg)
+                server_to_client(self.pc.log_channel, msg)
 
 class LLMClientFactory:
     @staticmethod

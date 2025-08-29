@@ -114,6 +114,7 @@ class WebPage:
                                    rate=ASR_SAMPLE_RATE,
                                    language_code=ASR_LANGUAGE,
                                    chunk_size=ASR_CHUNK_SIZE,
+                                   stop_word=STOP_WORD,
                                    pc=pc,
                                    )
         llm_client = create_client("llm", 
@@ -139,7 +140,7 @@ class WebPage:
             if pc.connectionState == 'connected':
                 msg = '=' * 50 + "\nStart Recording\n" + '=' * 50
                 print(msg)
-                log_to_client(pc.log_channel, msg)
+                server_to_client(pc.log_channel, msg)
             if pc.connectionState in ['closed', 'failed', 'disconnected']:
                 # Cancel all tasks
                 if hasattr(pc, '_stop_event'):
@@ -213,7 +214,7 @@ class WebPage:
             async def on_ended():
                 msg = f"Current {pc_id}: Track ended"
                 print(msg)
-                log_to_client(pc.log_channel, msg)
+                server_to_client(pc.log_channel, msg)
                 if hasattr(pc, "_stop_event"):
                     pc._stop_event.set()
                 await recorder.stop()

@@ -93,7 +93,7 @@ def create_recognizer(recognizer_id: str) -> cloud_speech.Recognizer:
     print("Created Recognizer:", recognizer.name)
     return recognizer
 
-def log_to_client(dc: RTCDataChannel, msg: str):
+def server_to_client(dc: RTCDataChannel, msg: str):
     """
     Log a message to the WebRTC data channel.
     Args:

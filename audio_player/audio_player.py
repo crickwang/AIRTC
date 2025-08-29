@@ -55,7 +55,7 @@ class AudioPlayer(AudioStreamTrack):
         
         # buffer management
         self._audio_buffer = deque()
-        self._max_buffer_ms = 30000  # Maximum 30000ms of audio buffered
+        self._max_buffer_ms = 6000000  # Maximum 6000000ms of audio buffered
         self._max_buffer_samples = (self._max_buffer_ms * sample_rate) // 1000
         
         # State tracking
@@ -133,7 +133,12 @@ class AudioPlayer(AudioStreamTrack):
         
         # Try to get audio data (non-blocking)
         try:
-            audio_data = self.audio_queue.get_nowait()
+            audio_data = await asyncio.wait_for(self.audio_queue.get(), timeout=3)
+            
+            if self._interrupt_requested:
+                self._clear_buffers()
+                self._interrupt_requested = False
+                self._is_playing = False
             
             if audio_data is None:
                 # End marker - let buffer drain naturally
@@ -155,6 +160,8 @@ class AudioPlayer(AudioStreamTrack):
                 if len(samples_to_add) > available_space:
                     dropped = len(samples_to_add) - available_space
                     print(f"AudioPlayer: Dropped {dropped} samples due to buffer overflow")
+        except asyncio.TimeoutError:
+            pass
         except asyncio.QueueEmpty:
             pass
     
