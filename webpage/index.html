@@ -2,56 +2,89 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>WebRTC</title>
-  <link href="/static/css/bootstrap.min.css" rel="stylesheet">
-  <link href="/static/css/client.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIRTC - Login</title>
+  
+  <link href="./static/css/bootstrap.min.css" rel="stylesheet">
+  <link href="./static/css/index.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
-<body class="p-3">
-  <div class="container">
-    <h1 class="mb-4">AIRTC</h1>
-    <div class="mb-3">
-      <!--<p><strong>Local Input (Blue):</strong></p>
-      <canvas id="localVisualizer" class="visualizer"></canvas>-->
-      <label for="password" class="form-label">Password</label>
-      <input type="password" class="form-control" id="password" placeholder="Enter the password">
-      <p class="mt-2">Press the buttons below to start and stop.</p>
-      <audio id="remoteAudio" autoplay></audio>
-      <button id="startButton" class="btn btn-primary" onclick="start()">Start</button>
-      <button id="stopButton" class="btn btn-secondary" onclick="stop()">Stop</button>
-      
-      <!-- Choice section for Local vs Online options -->
-      <div class="mt-4 mb-3">
-        <h5>Choose Processing Mode:</h5>
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="processingMode" id="localOption" value="local" checked>
-          <label class="form-check-label" for="localOption">
-            Local Processing
-          </label>
-          <small class="form-text text-muted d-block">Process audio/speech locally on your device</small>
-        </div>
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="processingMode" id="onlineOption" value="online">
-          <label class="form-check-label" for="onlineOption">
-            Online Processing
-          </label>
-          <small class="form-text text-muted d-block">Process audio/speech online (not implemented)</small>
-        </div>
-      </div>
+<body>
+  <nav class="navbar navbar-light bg-white border-bottom">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">AIRTC</a>
+      <ul class="navbar-nav flex-row ms-auto">
+        <li class="nav-item">
+          <a class="nav-link" href="introduction.html">Introduction</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="https://github.com/crickwang/AIRTC" target="_blank">GitHub</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="https://crickwang.github.io/website/" target="_blank">Portfolio</a>
+        </li>
+      </ul>
     </div>
-    <div class="logs-section">
-      <div class="logs-header">
-        <h3>Logs</h3>
-        <button class="clear-btn" onclick="clearLogs()">Clear Logs</button>
-      </div>
-      <div id="logContainer" class="log-container">
-      </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="form-container">
+      <form id="passwordForm">
+        <div class="input-wrapper">
+          <input type="password" class="password-input" 
+                 id="password" placeholder="Password" autocomplete="off">
+          <button type="submit" class="submit-btn">
+            <i class="arrow-icon">→</i>
+          </button>
+        </div>
+      </form>
     </div>
-    <!--<div class="mb-3">
-      <p><strong>Remote Audio Visualization (Red):</strong></p>
-      <canvas id="backendVisualizer" class="visualizer"></canvas>
-    </div>-->
   </div>
-  <script src="/static/js/bootstrap.bundle.min.js"></script>
-  <script src="/static/js/client.js"></script>
+
+  <script src="./static/js/bootstrap.bundle.min.js"></script>
+  <script src="./static/js/main.js"></script>
+  
+  <script>
+    document.getElementById('passwordForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const password = document.getElementById('password').value;
+      
+      try {
+        const response = await fetch('/api/check-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ password: password })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          window.location.href = 'generate.html';
+        } else {
+          const inputWrapper = document.querySelector('.input-wrapper');
+          const passwordInput = document.getElementById('password');
+          
+          passwordInput.classList.add('error');
+          inputWrapper.classList.add('error');
+          
+          setTimeout(() => {
+            passwordInput.classList.remove('error');
+            inputWrapper.classList.remove('error');
+          }, 300);
+          
+          passwordInput.value = '';
+          passwordInput.focus();
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Connection error. Please try again.');
+      }
+    });
+  </script>
 </body>
 </html>

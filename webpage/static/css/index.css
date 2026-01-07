@@ -1,0 +1,143 @@
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #f8f9fa;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+.navbar {
+  padding: 1rem 3rem;
+  background-color: white !important;
+}
+
+.navbar-brand {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #212529 !important;
+}
+
+.navbar-nav {
+  display: flex;
+  flex-direction: row;
+  gap: 2rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-item {
+  margin: 0;
+}
+
+.nav-link {
+  font-size: 1.1rem;
+  color: #212529 !important;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.nav-link:hover {
+  color: #0d6efd !important;
+}
+
+.main-content {
+  min-height: calc(100vh - 76px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.form-container {
+  max-width: 500px;
+  width: 100%;
+  padding: 0 1rem;
+}
+
+.input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: transform 0.3s;
+}
+
+.password-input {
+  flex: 1;
+  border-radius: 25px;
+  padding: 14px 20px;
+  border: 2px solid #dee2e6;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+
+.password-input:focus {
+  outline: none;
+  border-color: #0d6efd;
+  box-shadow: none;
+}
+
+.password-input.error {
+  border-color: #dc3545;
+}
+
+.submit-btn {
+  flex-shrink: 0;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background-color: #0d6efd;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.submit-btn:hover {
+  background-color: #0b5ed7;
+  transform: scale(1.05);
+}
+
+.submit-btn:active {
+  transform: scale(0.95);
+}
+
+.arrow-icon {
+  font-size: 1.5rem;
+  font-style: normal;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-10px); }
+  75% { transform: translateX(10px); }
+}
+
+.input-wrapper.error {
+  animation: shake 0.3s ease-in-out;
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 1rem 1.5rem;
+  }
+  
+  .navbar-brand {
+    font-size: 1.25rem;
+  }
+  
+  .navbar-nav {
+    gap: 1rem;
+  }
+  
+  .nav-link {
+    font-size: 1rem;
+  }
+  
+  .form-container {
+    max-width: 400px;
+  }
+}

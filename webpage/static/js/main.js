@@ -270,7 +270,6 @@ function negotiate() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `${document.getElementById("password").value}`
             },
             body: JSON.stringify({ 
                 sdp: offer.sdp, 

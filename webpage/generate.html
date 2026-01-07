@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIRTC</title>
+
+  <link href="./static/css/bootstrap.min.css" rel="stylesheet">
+  <link href="./static/css/generate.css" rel="stylesheet">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  
+  <nav class="navbar">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">AIRTC</a>
+      <ul class="navbar-nav flex-row ms-auto">
+        <li class="nav-item">
+          <a class="nav-link" href="introduction.html">Introduction</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="https://github.com/crickwang/AIRTC" target="_blank">GitHub</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="https://crickwang.github.io/website/" target="_blank">Portfolio</a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="main-container">
+    <div class="radio-row">
+      <div class="radio-option">
+        <input type="radio" name="processingMode" id="onlineOption" value="online">
+        <label for="onlineOption">Online Mode</label>
+        <small>Process audio remotely</small>
+      </div>
+      
+      <div class="radio-option">
+        <input type="radio" name="processingMode" id="localOption" value="local" checked>
+        <label for="localOption">Local Mode</label>
+        <small>Process audio locally</small>
+      </div>
+    </div>
+    
+    <div class="buttons-row">
+      <button class="btn-start" id="startButton" onclick="start()">Start</button>
+      <button class="btn-stop" id="stopButton" onclick="stop()">Stop</button>
+    </div>
+    
+    <div class="transcription-container">
+      <div class="transcription-box" id="transcriptionBox">
+      </div>
+    </div>
+    
+    <div class="clear-btn-container">
+      <button class="btn-clear" onclick="clearTranscription()">Clear Transcription</button>
+    </div>
+    
+    <audio id="remoteAudio" autoplay></audio>
+  </div>
+
+  <script src="./static/js/bootstrap.bundle.min.js"></script>
+  <script src="./static/js/main.js"></script>
+</body>
+</html>

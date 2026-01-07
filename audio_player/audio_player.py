@@ -267,4 +267,4 @@ class TestToneGenerator(AudioStreamTrack):
         frame.time_base = Fraction(1, self.sample_rate)
         frame.pts = self._timestamp
         self._timestamp += self.samples_per_frame
-        return frame
+        return frame 

@@ -1,0 +1,137 @@
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+.navbar {
+    padding: 1rem 3rem;
+    background-color: white;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.navbar-brand {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.navbar-nav {
+    gap: 2rem;
+}
+
+.nav-link {
+    font-size: 1.1rem;
+    color: #212529 !important;
+}
+
+.main-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 3rem 2rem;
+}
+
+.radio-row {
+    display: flex;
+    justify-content: center;
+    gap: 4rem;
+    margin-bottom: 2rem;
+}
+
+.radio-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.radio-option input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.radio-option label {
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 0;
+}
+
+.radio-option small {
+    color: #6c757d;
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+.buttons-row {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+}
+
+.btn-start {
+    background-color: #0d6efd;
+    color: white;
+    border: none;
+    padding: 0.75rem 2.5rem;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-start:hover {
+    background-color: #0b5ed7;
+}
+
+.btn-stop {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    padding: 0.75rem 2.5rem;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-stop:hover {
+    background-color: #5a6268;
+}
+
+.transcription-container {
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+
+.transcription-box {
+    background-color: #e9ecef;
+    border-radius: 12px;
+    min-height: 700px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.clear-btn-container {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn-clear {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-clear:hover {
+    background-color: #5a6268;
+}

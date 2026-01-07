@@ -49,14 +49,25 @@ class WebPage:
         content = open(os.path.join(ROOT, "webpage/js/client.js"), "r").read()
         return web.Response(content_type="application/javascript", text=content)
 
+    async def check_password(self, request: web.Request) -> web.Response:
+        """
+        Check the provided password against the secret key.
+        Args:
+            request: The HTTP request object.
+        Returns:
+            web.Response: The response indicating success or failure.
+        """
+        params = await request.json()
+        password = params.get('password', '')
+        if hashlib.sha256(password.encode()).hexdigest() == os.getenv('SECRET_KEY'):
+            return web.Response(status=200, text="Authorized")
+        else:
+            return web.Response(status=403, text="Forbidden")
+
     async def offer(self, request: web.Request) -> web.Response:
         """
         Manage WebRTC connection.
         """
-        password = request.headers.get('Authorization')
-        if hashlib.sha256(password.encode()).hexdigest() != os.getenv('SECRET_KEY'):
-            return web.Response(status=403)
-
         params = await request.json()
         processing_mode = params.get("processingMode", "local")
         # located in js
