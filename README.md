@@ -134,3 +134,5 @@ To set up the client for AIRTC, you may follow these steps:
 
 - **Google TTS**
    Similar to Google's ASR service, there is no need to set any parameters after gcloud and environment variables are set. 
+
+- For more information please contact yiw085@ucsd.edu
