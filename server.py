@@ -6,12 +6,14 @@ import os
 import traceback
 import uuid
 import hashlib
+from datetime import datetime
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription, \
                    RTCDataChannel, RTCIceServer, RTCConfiguration
 from aiortc.contrib.media import MediaBlackhole
 from av.audio.resampler import AudioResampler
 from config.constants import *
+from config.logging_config import setup_logging
 from audio_player.audio_player import AudioPlayer
 
 class WebPage:
@@ -22,11 +24,11 @@ class WebPage:
         """
         Initialize the WebPage class.
         """
-        logging.basicConfig(filename=os.path.join(ROOT, "a.log"), level=logging.INFO)
-        self.logger = logging.getLogger()
+        self.logger = logging.getLogger(__name__)
         self.pcs = set()
         self.args = self.generate_args()
-
+        self.logger.info("Logging is set up.")
+        
     async def index(self, request: web.Request) -> web.Response:
         """
         Serve the index HTML file.
@@ -35,8 +37,30 @@ class WebPage:
         Returns:
             web.Response: The response containing the HTML content.
         """
-        content = open(os.path.join(ROOT, "webpage/index.html"), "r").read()
-        return web.Response(content_type="text/html", text=content)
+        content = open(os.path.join(ROOT, "webpage/index.html"), "r", encoding="utf-8").read()
+        return web.Response(content_type="text/html", text=content, charset='utf-8')
+    
+    async def introduction(self, request: web.Request) -> web.Response:
+        """
+        Serve the introduction HTML file.
+        Args:
+            request: The HTTP request object.
+        Returns:
+            web.Response: The response containing the HTML content.
+        """
+        content = open(os.path.join(ROOT, "webpage/introduction.html"), "r", encoding="utf-8").read()
+        return web.Response(content_type="text/html", text=content, charset='utf-8')
+    
+    async def generate(self, request: web.Request) -> web.Response:
+        """
+        Serve the generate HTML file.
+        Args:
+            request: The HTTP request object.
+        Returns:
+            web.Response: The response containing the HTML content.
+        """
+        content = open(os.path.join(ROOT, "webpage/generate.html"), "r", encoding="utf-8").read()
+        return web.Response(content_type="text/html", text=content, charset='utf-8')
 
     async def javascript(self, request: web.Request) -> web.Response:
         """
@@ -46,7 +70,7 @@ class WebPage:
         Returns:
             web.Response: The response containing the JavaScript content.
         """
-        content = open(os.path.join(ROOT, "webpage/js/client.js"), "r").read()
+        content = open(os.path.join(ROOT, "webpage/static/js/main.js"), "r").read()
         return web.Response(content_type="application/javascript", text=content)
 
     async def check_password(self, request: web.Request) -> web.Response:
@@ -60,9 +84,9 @@ class WebPage:
         params = await request.json()
         password = params.get('password', '')
         if hashlib.sha256(password.encode()).hexdigest() == os.getenv('SECRET_KEY'):
-            return web.Response(status=200, text="Authorized")
+            return web.Response(status=200)
         else:
-            return web.Response(status=403, text="Forbidden")
+            return web.Response(status=403)
 
     async def offer(self, request: web.Request) -> web.Response:
         """
@@ -72,6 +96,7 @@ class WebPage:
         processing_mode = params.get("processingMode", "local")
         # located in js
         offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+        self.logger.info(f"Received offer with processing mode: {processing_mode}")
         if processing_mode == "local":
             pc = RTCPeerConnection()
         else:
@@ -90,7 +115,7 @@ class WebPage:
         self.pcs.add(pc)
         log_channel = pc.createDataChannel("log")
         pc.log_channel = log_channel
-        print(f"Current {pc_id}: New connection established")
+        self.logger.info(f"Current {pc_id}: New connection established")
 
         # Create session-specific queues
         # asr_queue: transfer results of ASR to LLM
@@ -147,10 +172,10 @@ class WebPage:
 
         @pc.on("connectionstatechange")
         async def on_connectionstatechange():
-            print(f"Current {pc_id}: Connection state: {pc.connectionState}")
+            self.logger.info(f"Current {pc_id}: Connection state: {pc.connectionState}")
             if pc.connectionState == 'connected':
-                msg = '=' * 50 + "\nStart Recording\n" + '=' * 50
-                print(msg)
+                msg = '\n' + '=' * 50 + '\nStart Recording\n' + '=' * 50
+                self.logger.info(msg)
                 server_to_client(pc.log_channel, msg)
             if pc.connectionState in ['closed', 'failed', 'disconnected']:
                 # Cancel all tasks
@@ -170,11 +195,11 @@ class WebPage:
                 
                 await pc.close()
                 self.pcs.discard(pc)
-                print(f"{pc_id}: Connection cleaned up")
+                self.logger.info(f"{pc_id}: Connection cleaned up")
 
         @pc.on("track")
         async def on_track(track):
-            print(f"Current {pc_id}: Received {track.kind} track")
+            self.logger.info(f"Current {pc_id}: Received {track.kind} track")
             if track.kind == "audio":
                 recorder.addTrack(track)
                 # Create control events to stop or interrupt connection
@@ -218,13 +243,13 @@ class WebPage:
                     )
 
                 except Exception as e:
-                    print(f"Current {pc_id}: Pipeline error: {e}")
+                    self.logger.error(f"Current {pc_id}: Pipeline error: {e}")
                     traceback.print_exc()
 
             @track.on("ended")
             async def on_ended():
                 msg = f"Current {pc_id}: Track ended"
-                print(msg)
+                self.logger.info(msg)
                 server_to_client(pc.log_channel, msg)
                 if hasattr(pc, "_stop_event"):
                     pc._stop_event.set()
@@ -260,10 +285,13 @@ class WebPage:
         """
         app = web.Application()
         app.on_shutdown.append(self.on_shutdown)
+        print(os.path.join(ROOT, "webpage"))
         app.router.add_get("/", self.index)
-        app.router.add_get(path=os.path.join("/", "webpage", "js", "client.js"), handler=self.javascript)
+        app.router.add_get("/introduction.html", self.introduction)
+        app.router.add_get("/generate.html", self.generate)
         app.router.add_post("/offer", self.offer)
-        app.router.add_static("/static/", path=os.path.join(ROOT, "webpage"), show_index=True)
+        app.router.add_post("/check-password", self.check_password)
+        app.router.add_static("/static/", path=os.path.join(ROOT, "webpage", "static"), show_index=True)
         if PORT:
             port = int(PORT)
         else:
@@ -290,6 +318,7 @@ class WebPage:
         return parser.parse_args()
 
 if __name__ == "__main__":
+    setup_logging()
     webpage = WebPage()
     ssl_context = get_ssl_context(webpage.args)
     webpage.run_web_app(ssl_context=ssl_context)

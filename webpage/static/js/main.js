@@ -418,3 +418,12 @@ function getProcessingMode() {
     const selectedOption = document.querySelector('input[name="processingMode"]:checked');
     return selectedOption ? selectedOption.value : 'local'; // default to local
 }
+
+function clearTranscription() {
+    const transcriptionBox = document.getElementById('transcriptionBox');
+    if (transcriptionBox && transcriptionBox.innerHTML.trim() !== '') {
+        if (confirm('Are you sure you want to clear all transcriptions?')) {
+            transcriptionBox.innerHTML = '';
+        }
+    }
+}

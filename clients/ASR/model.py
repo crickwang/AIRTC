@@ -18,6 +18,9 @@ import os
 import uuid
 from urllib.parse import urlencode
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ANSI escape sequences for colored output
 # These are used to color the output in the terminal.
@@ -311,7 +314,7 @@ class GoogleASR(ASRClient):
                     self.last_transcript_was_final = False
         except Exception as e:
             msg = f"Error in ASR: {e}"
-            print(msg)
+            logger.error(msg)
             if self.pc:
                 server_to_client(self.pc.log_channel, msg)
         return transcript
@@ -378,7 +381,7 @@ class GoogleASR(ASRClient):
                     interrupt_event.set()
 
                     msg = f"ASR: Speech detected - starting transcription"
-                    print(msg)
+                    logger.info(msg)
                     if self.pc:
                         server_to_client(self.pc.log_channel, msg)
 
@@ -402,14 +405,14 @@ class GoogleASR(ASRClient):
                                 transcript = self.send_request()
                                 if self.stop_word and self.stop_word == transcript:
                                     msg = "Stop word triggered, exiting the program"
-                                    print(msg)
+                                    logger.info(msg)
                                     if self.pc:
                                         server_to_client(self.pc.log_channel, msg)
                                     stop_event.set()
                                 session_output_queue.put(transcript)
                         except Exception as e:
                             msg = f"ASR thread error: {e}"
-                            print(msg)
+                            logger.error(msg)
                             if self.pc:
                                 server_to_client(self.pc.log_channel, msg)
                             session_output_queue.put(None)
@@ -445,19 +448,19 @@ class GoogleASR(ASRClient):
                                 
                         except asyncio.TimeoutError:
                             msg = "ASR: Timeout waiting for more audio"
-                            print(msg)
+                            logger.info(msg)
                             if self.pc:
                                 server_to_client(self.pc.log_channel, msg)
                             self.closed = True
                             break
         except asyncio.TimeoutError:
             msg = f"ASR: User inactive for {timeout} seconds"
-            print(msg)
+            logger.info(msg)
             if self.pc:
                 server_to_client(self.pc.log_channel, msg)
         except Exception as e:
             msg = f"ASR: Error: {e}"
-            print(msg)
+            logger.error(msg)
             if self.pc:
                 server_to_client(self.pc.log_channel, msg)
             traceback.print_exc()

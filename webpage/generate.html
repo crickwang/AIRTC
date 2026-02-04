@@ -3,10 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AIRTC</title>
+  <title>AIRTC Interaction Page</title>
 
-  <link href="./static/css/bootstrap.min.css" rel="stylesheet">
-  <link href="./static/css/generate.css" rel="stylesheet">
+  <script>
+    if (!document.cookie.includes('authorized=true')) {
+      window.location.href = '/';
+    }
+  </script>
+
+  <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/generate.css" rel="stylesheet">
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -63,7 +69,7 @@
     <audio id="remoteAudio" autoplay></audio>
   </div>
 
-  <script src="./static/js/bootstrap.bundle.min.js"></script>
-  <script src="./static/js/main.js"></script>
+  <script src="/static/js/bootstrap.bundle.min.js"></script>
+  <script src="/static/js/main.js"></script>
 </body>
 </html>

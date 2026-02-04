@@ -5,6 +5,9 @@ from collections import deque
 import time
 from av import AudioFrame
 from fractions import Fraction
+import logging
+
+logger = logging.getLogger(__name__)
 
 class AudioPrinterTrack(AudioStreamTrack):
     """ 
@@ -67,7 +70,7 @@ class AudioPlayer(AudioStreamTrack):
         self._last_frame_time = time.time()
         self._frame_interval = self.samples_per_frame / self.sample_rate
 
-        print(f"AudioPlayer: Initialized")
+        logger.info("AudioPlayer initialized.")
 
     async def recv(self) -> AudioFrame:
         """
@@ -142,7 +145,7 @@ class AudioPlayer(AudioStreamTrack):
             
             if audio_data is None:
                 # End marker - let buffer drain naturally
-                print("AudioPlayer: End marker received")
+                logger.info("AudioPlayer: End marker received")
                 return
             
             # Add to buffer
@@ -159,7 +162,7 @@ class AudioPlayer(AudioStreamTrack):
                 
                 if len(samples_to_add) > available_space:
                     dropped = len(samples_to_add) - available_space
-                    print(f"AudioPlayer: Dropped {dropped} samples due to buffer overflow")
+                    logger.info(f"AudioPlayer: Dropped {dropped} samples due to buffer overflow")
         except asyncio.TimeoutError:
             pass
         except asyncio.QueueEmpty:
@@ -181,7 +184,7 @@ class AudioPlayer(AudioStreamTrack):
         except asyncio.QueueEmpty:
             pass
         
-        print(f"AudioPlayer: Buffers cleared")
+        logger.info("AudioPlayer: Buffers cleared")
 
 class TestToneGenerator(AudioStreamTrack):
     """
