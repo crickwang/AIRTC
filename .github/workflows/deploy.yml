@@ -2,11 +2,11 @@ name: Deploy to Server
 
 on:
   push:
-    branches: [ main ]  # or master
+    branches: [ main ]
 
 jobs:
   deploy:
-    runs-on: ubuntu
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
