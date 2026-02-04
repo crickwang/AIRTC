@@ -21,4 +21,4 @@ jobs:
         script: |
           cd /home/ubuntu/AIRTC
           git pull origin main
-          pm2 restart airtc
+          pm2 restart airtc || pm2 start server.js --name airtc
