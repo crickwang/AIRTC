@@ -1,55 +1,54 @@
 
+import argparse
 import asyncio
+import io
 import json
 import logging
 import os
-import ssl
-import traceback
-import uuid
-import yaml
-import argparse
-import numpy as np
-import threading
 import queue
-import time
 import re
-from av import AudioFrame
-from pydub import AudioSegment
-import io
-from fractions import Fraction
-import sounddevice as sd
-import pyaudio as pa
-from collections import OrderedDict, deque
+import ssl
+import threading
+import time
+import traceback
 import unicodedata as ucd
-from openai import OpenAI
+import uuid
+from collections import OrderedDict, deque
+from fractions import Fraction
 
-from dotenv import load_dotenv
+import azure.cognitiveservices.speech as speechsdk
+import numpy as np
+import pyaudio as pa
+import sounddevice as sd
+import speech_recognition as sr
+import torch.hub
+import yaml
 from aiohttp import web
 from aiortc import AudioStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole
-from av.audio.resampler import AudioResampler
 from aiortc.mediastreams import MediaStreamError
-from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
-import torch.hub
-import speech_recognition as sr
+from av import AudioFrame
+from av.audio.resampler import AudioResampler
+from dotenv import load_dotenv
+from funasr import AutoModel
+from google.api_core import client_options
 
 # ASR imports
-from google.cloud import speech_v1 as speech, texttospeech
+from google.cloud import speech_v1 as speech
+from google.cloud import texttospeech
 from google.protobuf import duration_pb2
-from google.api_core import client_options
-from asr.google_transcription import AudioStream, listen_print_loop
+from openai import OpenAI
+from pydub import AudioSegment
+from silero_vad import get_speech_timestamps, load_silero_vad, read_audio
 
 # FunASR imports
 from asr.funasr_stream import ParaformerStreaming
-from funasr import AutoModel 
+from asr.google_transcription import AudioStream, listen_print_loop
 
 # # OpenAI RealTime WebRTC import
 # from asr.openai_transcription import OpenAITranscription
-
 # LLM import - OpenAI, Baidu Proxy
-from llm.baidu import BaiduClient 
+from llm.baidu import BaiduClient
 
 # EdgeTTS import
 from tts.edge_tts_stream import EdgeTTS
-
-import azure.cognitiveservices.speech as speechsdk

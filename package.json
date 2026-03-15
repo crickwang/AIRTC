@@ -1,0 +1,13 @@
+{
+  "name": "airtc",
+  "version": "1.0.0",
+  "description": "AI Real-Time Communication - WebRTC voice AI pipeline",
+  "private": true,
+  "scripts": {
+    "lint": "eslint webpage/static/js/ --ignore-pattern '*.min.js'",
+    "lint:fix": "eslint webpage/static/js/ --ignore-pattern '*.min.js' --fix"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
+  }
+}

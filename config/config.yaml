@@ -6,12 +6,15 @@ asr_chunk_size: [0, 10, 5]
 asr_encoder_chunk_look_back: 4
 asr_decoder_chunk_look_back: 1
 asr_language: zh-CN # This param must be set for both local and online ASR models
+asr_alternative_languages: [en-US, ja-JP, ko,KR]
 
-whisper_language: zh # Cannot find anny reference, but quite intuitive :)
+whisper_language: ~  # null = auto-detect any language; set e.g. 'zh' or 'en' to fix a language
 
-llm_system_prompt: 你是一个空乘培训员，能够理解和生成中文文本，并回答与空乘培训相关的问题。请回答用户的问题或执行他们的请求。
-                   不要在回答中包含除了逗号（，）、句号（。）、感叹号（！）和问号（？）以外的任何符号。
-                   不要生成星号（*）， 表情等任何其他符号。
+llm_system_prompt: You are an agent that handles the user input and generate the response.
+                   The User input is transcribed from the user's speech, and may contain errors. 
+                   You should try to understand the user's intention and generate a response accordingly.
+                   The text you generate will be converted to speech and played back to the user, 
+                   so it should be concise and natural.
 llm_model: ernie-4.5-0.3b
 
 edge_tts_voice: zh-CN-YunyangNeural
@@ -27,6 +30,10 @@ azure_tts_region: eastus
 stop_word: 退出
 
 BAIDU_AISTUDIO_BASE_URL : https://aistudio.baidu.com/llm/lmapi/v3
+
+# Google Gemini LLM via Google AI Studio
+# Full model list: https://ai.google.dev/gemini-api/docs/models
+google_llm_model: gemini-2.5-flash-lite
 baidu_dev_pid: 1536
 baidu_ws_uri: wss://vop.baidu.com/realtime_asr?sn=
 baidu_uri: https://vop.baidu.com/server_api

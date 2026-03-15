@@ -1,0 +1,51 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = [
+    "model/",
+    "seamless/",
+    "__pycache__/",
+    ".venv/",
+    "node_modules/",
+    "*.pyc",
+    # Variant / legacy copies — not checked in CI
+    "server-cn.py",
+    "clients/LLM/model-cn.py",
+    "clients/ASR/model-cn.py",
+    "clients/TTS/model-cn.py",
+    # Local one-off test scripts
+    "init_tests/",
+    "clients/ASR/test_asr.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP"]
+ignore = [
+    "E501",   # line too long — not enforced
+    "W291",   # trailing whitespace — mostly in docstrings, ruff can't auto-fix those
+    "W293",   # blank line with whitespace — same reason
+    "N802",   # function name should be lowercase — ASR/LLM/TTS names are uppercase by convention
+    "N803",   # argument name should be lowercase
+    "N806",   # variable in function should be lowercase
+    "UP007",  # use X | Y for unions — keep compatible with older Python
+    "F401",   # imported but unused — constants.py is re-exported via *
+    "F403",   # star import used — intentional: `from config.constants import *`
+    "F405",   # may be undefined from star imports — false positive due to F403
+    "E402",   # module-level import not at top — some files need runtime imports
+]
+
+[tool.ruff.lint.per-file-ignores]
+"config/constants.py" = ["F401"]
+"register.py"         = ["F401"]
+# utils.py has a boto3 helper with the import commented out — suppress until cleaned up
+"utils.py"            = ["F821", "F841"]
+# Whisper import alias triggers N813 (CamelCase imported as lowercase) — intentional alias
+"clients/ASR/model.py" = ["N813"]
+# TTS latency variable is unused instrumentation placeholder — ignore for now
+"clients/TTS/model.py" = ["F841"]
+# audio_player has an unused variable from a debug branch
+"audio_player/audio_player.py" = ["F841"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

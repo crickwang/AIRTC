@@ -17,3 +17,4 @@ afoo.py
 .vscode
 __pycache__
 key
+.claude

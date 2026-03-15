@@ -1,6 +1,7 @@
+import os
+
 import yaml
 from dotenv import load_dotenv
-import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -10,7 +11,7 @@ class Settings:
         self.config = self.load_config()
 
     def load_config(self):
-        with open(os.path.join(ROOT, 'config', 'config.yaml'), "r", encoding='utf-8') as f:
+        with open(os.path.join(ROOT, 'config', 'config.yaml'), encoding='utf-8') as f:
             return yaml.safe_load(f)
 
     def get_config(self, key, default=None):
@@ -21,7 +22,7 @@ class Settings:
             default: The default value to return if the key is not found.
         """
         return self.config.get(key, default)
-    
+
     def get_env(self, key, default=None):
         """
         Get an environment variable value by key.
