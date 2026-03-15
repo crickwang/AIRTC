@@ -1,14 +1,17 @@
 import argparse
+import json
+import os
 import ssl
+
+import requests
+from aiortc import RTCDataChannel
+from dotenv import load_dotenv
+
 from clients.ASR.model import ASRClientFactory
 from clients.LLM.model import LLMClientFactory
 from clients.TTS.model import TTSClientFactory
 from vad.vad import VADFactory
-import requests
-from dotenv import load_dotenv
-import os
-import json
-from aiortc import RTCDataChannel
+
 # import boto3
 # from botocore.exceptions import ClientError
 
@@ -44,7 +47,7 @@ def create_client(model_type, platform, **kwargs):
     except Exception as e:
         print(f"Error creating client: {e}")
         return None
-    
+
 client_id = os.getenv('BAIDU_API_KEY')
 client_secret = os.getenv('BAIDU_SECRET_KEY')
 
@@ -100,7 +103,6 @@ def server_to_client(dc: RTCDataChannel, msg: str):
         dc (RTCDataChannel): The WebRTC data channel.
         msg (str): The message to log.
     """
-    print("get message", msg, dc.readyState)
     if dc and (dc.readyState == "open"):
         try:
             log_data = json.dumps({"type": "log", "message": msg})

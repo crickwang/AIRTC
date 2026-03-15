@@ -1,22 +1,23 @@
-from kokoro import KPipeline
-from IPython.display import display, Audio
-import soundfile as sf
+import queue
+import re
+import threading
+import time
+
 import numpy as np
 import sounddevice as sd
-import threading
-import queue
-import time
+import soundfile as sf
 import yaml
-import re
+from IPython.display import Audio, display
+from kokoro import KPipeline
 
-with open('tts_test.yaml', 'r', encoding='utf-8') as file:
+with open('tts_test.yaml', encoding='utf-8') as file:
     config = yaml.safe_load(file)
 text = config.get('test_text', 'large_text').replace(' ', '').strip()
 voice = config.get('kokoro_voice', 'zm_yunjian')
 language = config.get('kokoro_language', 'z')
 
 reexp = r'(?<=[.!?。])\s*'
-    
+
 def main() -> float:
     """
     Main function to run the TTS pipeline using Kokoro.
@@ -49,7 +50,7 @@ def main() -> float:
 
     audio_queue.put(None)
     play_thread.join()
-    
+
     return start
 
 # 第二个进程
@@ -68,7 +69,7 @@ def second_worker(audio_queue):
             break
         sd.play(audio, samplerate=24000)
         sd.wait()
-        
+
 if __name__ == "__main__":
     print('===================开始kokoro TTS=====================')
     start = main()

@@ -1,9 +1,10 @@
 import os
-from openai import OpenAI
-from dotenv import load_dotenv
-import yaml
 
-with open('llm_test.yaml', 'r', encoding='utf-8') as file:
+import yaml
+from dotenv import load_dotenv
+from openai import OpenAI
+
+with open('llm_test.yaml', encoding='utf-8') as file:
     config = yaml.safe_load(file)
 system = config.get('system')
 users = config.get('user')
@@ -16,9 +17,9 @@ client = OpenAI(
 )
 
 messages = []
-if not system is None:
+if system is not None:
     messages.append({'role': 'system', 'content': system})
-    
+
 if assistants is None:
     if len(users) != 1:
         raise ValueError("Please provide a single user message if no assistant messages are provided.")

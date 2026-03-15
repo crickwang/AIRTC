@@ -1,16 +1,17 @@
-from ollama import chat
 import asyncio
-import edge_tts.submaker as submaker
-import edge_tts.communicate as communicate
-import yaml
-from pywhispercpp.model import Model
-from pydub import AudioSegment
 import os
 import time
-from openai import OpenAI
-from dotenv import load_dotenv
 
-SAMPLE_RATE = 16000 
+import edge_tts.communicate as communicate
+import edge_tts.submaker as submaker
+import yaml
+from dotenv import load_dotenv
+from ollama import chat
+from openai import OpenAI
+from pydub import AudioSegment
+from pywhispercpp.model import Model
+
+SAMPLE_RATE = 16000
 CHUNK_DURATION = 0.5  # seconds
 CHUNK_SIZE = int(SAMPLE_RATE * CHUNK_DURATION)
 SILENCE_THRESHOLD = 0.01 # 0.05 for normal volume
@@ -19,7 +20,7 @@ MAX_SILENT_CHUNKS = int(SILENCE_DURATION / CHUNK_DURATION)
 CHUNKS_PER_TRANSCRIBE = int(2 / CHUNK_DURATION) # Transcribe every 2 seconds
 MAX_TOKEN = 1024
 
-with open('config.yaml', 'r', encoding='utf-8') as file:
+with open('config.yaml', encoding='utf-8') as file:
     config = yaml.safe_load(file)
 
 llm_model = config.get('llm_model', 'deepseek-r1:1.5b')
@@ -114,7 +115,7 @@ def llm_online(texts: str, max_token: int = MAX_TOKEN) -> str:
     contents = ''
     for chunk in chat_completion:
         contents += chunk.choices[0].delta.content or ""
-    
+
     print(f'llm outputs: {contents}')
     return contents
 

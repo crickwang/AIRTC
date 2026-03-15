@@ -1,5 +1,6 @@
-from config.settings import Settings
 import os
+
+from config.settings import Settings
 
 # Load configuration from YAML file;
 # Load environment variables and private tokens from .env file
@@ -20,6 +21,9 @@ TIME_PER_CHUNK = 10  # in ms
 ASR_SAMPLE_RATE = 24000  # in Hz
 ASR_LANGUAGE = settings.get_config("asr_language", "zh-CN")  # Language code, please refer to
                          # [https://developers.google.com/workspace/admin/directory/v1/languages]
+# Google ASR only: up to 3 additional BCP-47 tags for multi-language auto-detection.
+# Example: ["en-US", "ja-JP"]   Leave as [] to use a single fixed language.
+ASR_ALTERNATIVE_LANGUAGES = settings.get_config("asr_alternative_languages", [])
 ASR_CHUNK_SIZE = int(ASR_SAMPLE_RATE * TIME_PER_CHUNK / 1000)
 CHANNELS = 1
 FORMAT = "s16"
@@ -46,7 +50,7 @@ BAIDU_ASR_SAMPLE_RATE = 16000
 
 # Whisper use different language codes
 WHISPER_ASR_MODEL = settings.get_config("whisper_model")
-WHISPER_LANGUAGE_CODES = settings.get_config("whisper_language_codes", 'zh')
+WHISPER_LANGUAGE_CODES = settings.get_config("whisper_language", None)  # None = auto-detect
 
 GOOGLE_PROJ_ID = settings.get_config("GOOGLE_PROJ_ID")
 
@@ -57,6 +61,15 @@ LLM_BASE_URL = settings.get_config("BAIDU_AISTUDIO_BASE_URL")
 # Other available Baidu open source options: [https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Wm9cvy6rl]
 LLM_MODEL = settings.get_config("llm_model")
 MAX_TOKENS = 512
+
+# Constants for Google Gemini LLM via Google AI Studio
+# Get a free API key at: https://aistudio.google.com/apikey (use a personal Gmail)
+GOOGLE_AI_API_KEY = settings.get_env("GOOGLE_AI_API_KEY")
+# OpenAI-compatible endpoint for AI Studio — fixed, never changes
+GOOGLE_LLM_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+# AI Studio model names (no "google/" prefix, no "-001" suffix):
+# gemini-2.0-flash (default), gemini-2.0-flash-lite, gemini-1.5-flash, gemini-1.5-flash-8b
+GOOGLE_LLM_MODEL = settings.get_config("google_llm_model", "gemini-2.0-flash")
 
 # Constants for Google TTS
 GOOGLE_TTS_VOICE = settings.get_config("google_tts_voice", None)

@@ -1,11 +1,14 @@
-import numpy as np
 from abc import ABC, abstractmethod
+
+import numpy as np
+
 from register import register
+
 
 class VAD(ABC):
     def __init__(self, threshold, **kwargs):
         self.threshold = threshold
-    
+
     @abstractmethod
     def is_speech(self, frame: np.ndarray, **kwargs) -> bool:
         """
@@ -16,7 +19,7 @@ class VAD(ABC):
             bool: True if speech is detected, False otherwise.
         """
         pass
-    
+
 @register.add_model("vad", "multiFrame")
 class MultiFrameVAD(VAD):
     """
@@ -41,7 +44,7 @@ class MultiFrameVAD(VAD):
         # store the previous frames and prevent them from being swallowed if they
         # are meaningful speeches.
         self.frames = [None for i in range(speech_frames_required)]
-        
+
     def populate(self, frame:np.ndarray) -> None:
         """
         Populate the VAD frames with the current audio frame.
@@ -52,7 +55,7 @@ class MultiFrameVAD(VAD):
         """
         self.frames.pop(0)
         self.frames.append(frame)
-        
+
     def is_speech(self, frame: np.ndarray) -> bool:
         """
         Detect if frame contains speech with hysteresis to avoid false positives.
@@ -64,9 +67,9 @@ class MultiFrameVAD(VAD):
         # Calculate RMS energy
         if len(frame) == 0:
             return False
-            
+
         rms_energy = np.sqrt(np.mean(frame.astype(np.float32) ** 2))
-        
+
         # Use hysteresis for more stable detection
         self.populate(frame)
         if rms_energy > self.threshold:

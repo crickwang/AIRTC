@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+
 @dataclass
 class Register:
     asr_models = {}
@@ -34,7 +35,7 @@ class Register:
             print(llm_msg)
             print(tts_msg)
             print(vad_msg)
-            
+
     def get_model(self, model_type, model_name):
         try:
             if model_type == "asr":
@@ -50,7 +51,7 @@ class Register:
         except ValueError as e:
             print(f"Error: {e}")
             return None
-        except Exception as e:
+        except Exception:
             print(f"Error: Invalid model name: {model_name}")
             self.print_available_models(model_type)
             return None

@@ -1,7 +1,7 @@
-from ollama import chat
 import yaml
+from ollama import chat
 
-with open('llm_test.yaml', 'r', encoding='utf-8') as file:
+with open('llm_test.yaml', encoding='utf-8') as file:
     config = yaml.safe_load(file)
 
 system = config.get('system')
@@ -10,9 +10,9 @@ assistants = config.get('assistant')
 model = config.get('local_model', 'deepseek-r1:1.5b')
 
 messages = []
-if not system is None:
+if system is not None:
     messages.append({'role': 'system', 'content': system})
-    
+
 if assistants is None:
     if len(users) != 1:
         raise ValueError("Please provide a single user message if no assistant messages are provided.")

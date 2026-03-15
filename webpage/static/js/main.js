@@ -5,6 +5,22 @@ let localAudioTrack = null;
 let audioContext = null;
 let logChannel = null;
 
+// Append a labeled entry to the transcription box
+function appendToTranscription(text, role) {
+    const box = document.getElementById('transcriptionBox');
+    if (!box) return;
+    const entry = document.createElement('p');
+    if (role === 'user') {
+        entry.textContent = 'You: ' + text;
+        entry.style.cssText = 'margin: 6px 0; color: #2b6cb0; font-weight: 500;';
+    } else {
+        entry.textContent = 'AI: ' + text;
+        entry.style.cssText = 'margin: 6px 0; color: #276749; font-weight: 500;';
+    }
+    box.appendChild(entry);
+    box.scrollTop = box.scrollHeight;
+}
+
 // Add log message to the frontend
 function addLogMessage(message, type = 'info') {
     const logContainer = document.getElementById('logContainer');
@@ -54,12 +70,9 @@ function createPeerConnection(mode = 'local') {
 
     if (mode === 'online') {
         config.iceServers = [
-            { urls: 'stun:stun.qq.com:3478' },
+            // { urls: 'stun:stun.qq.com:3478' },
             { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' }
+            { urls: 'stun:stun1.l.google.com:19302' }
         ];
         config.iceCandidatePoolSize = 10;
     }
@@ -80,7 +93,14 @@ function createPeerConnection(mode = 'local') {
     logChannel.onmessage = function(event) {
         try {
             const data = JSON.parse(event.data);
-            if (data.type === 'log') {
+            if (data.type === 'transcription') {
+                appendToTranscription(data.message, 'user');
+            } else if (data.type === 'response') {
+                appendToTranscription(data.message, 'ai');
+            } else if (data.type === 'stop_word') {
+                addLogMessage('Stop word detected — session paused', 'client');
+                stop();
+            } else if (data.type === 'log') {
                 addLogMessage(data.message, 'server');
             }
         } catch (e) {
@@ -99,7 +119,7 @@ function createPeerConnection(mode = 'local') {
     pc.onconnectionstatechange = () => {
         console.log("Connection state:", pc.connectionState);
         if (["disconnected", "failed", "closed"].includes(pc.connectionState)) {
-            stop();
+            fullStop();
         }
 
         else if (pc.connectionState === "connected") {
@@ -114,7 +134,14 @@ function createPeerConnection(mode = 'local') {
         channel.onmessage = function(event) {
             try {
                 const data = JSON.parse(event.data);
-                if (data.type === 'log') {
+                if (data.type === 'transcription') {
+                    appendToTranscription(data.message, 'user');
+                } else if (data.type === 'response') {
+                    appendToTranscription(data.message, 'ai');
+                } else if (data.type === 'stop_word') {
+                    addLogMessage('Stop word detected — session paused', 'client');
+                    stop();
+                } else if (data.type === 'log') {
                     addLogMessage(data.message, 'server');
                 }
             } catch (e) {
@@ -294,18 +321,38 @@ function negotiate() {
 
 function start() {
     console.log("Starting WebRTC connection...");
-    
+
+    // Soft restart: PC is still connected, mic was only muted — just unmute.
+    if (pc && pc.connectionState === 'connected' && localAudioTrack && !localAudioTrack.enabled) {
+        localAudioTrack.enabled = true;
+        console.log("Soft restart: microphone unmuted");
+        addLogMessage('Session resumed — microphone active', 'client');
+        // Re-attach remote audio stream if needed
+        const remoteAudio = document.getElementById("remoteAudio");
+        if (remoteAudio && !remoteAudio.srcObject) {
+            // The audio player track is still flowing on the server; re-attach
+            pc.getReceivers().forEach(receiver => {
+                if (receiver.track.kind === 'audio') {
+                    const stream = new MediaStream([receiver.track]);
+                    remoteAudio.srcObject = stream;
+                    remoteAudio.play().catch(e => console.error("Re-attach audio failed:", e));
+                }
+            });
+        }
+        return;
+    }
+
     // Get the selected processing mode
     const processingMode = getProcessingMode();
     addLogMessage(`Starting with ${processingMode} processing mode`, 'info');
-    
+
     // Ensure audio context is created on user interaction
     ensureAudioContext();
-    
+
     if (pc) {
-        stop();
+        fullStop();
     }
-    
+
     pc = createPeerConnection(processingMode);
 
     // Audio constraints that match your server
@@ -350,9 +397,9 @@ function start() {
         });
 }
 
-function stop() {
-    console.log("Stopping connection...");
-    
+// Hard disconnect: close PC and release all tracks
+function fullStop() {
+    console.log("Full disconnect...");
     if (localStream) {
         localStream.getTracks().forEach(track => {
             track.stop();
@@ -361,24 +408,35 @@ function stop() {
         localStream = null;
         localAudioTrack = null;
     }
-    
     if (pc) {
         pc.close();
         pc = null;
+        logChannel = null;
         console.log("Peer connection closed");
     }
-    
-    // Clear remote audio
     const remoteAudio = document.getElementById("remoteAudio");
-    if (remoteAudio) {
-        remoteAudio.srcObject = null;
-    }
-    
-    // Remove any playback messages
+    if (remoteAudio) remoteAudio.srcObject = null;
     const message = document.getElementById('playback-message');
-    if (message) {
-        document.body.removeChild(message);
+    if (message && document.body.contains(message)) document.body.removeChild(message);
+}
+
+function stop() {
+    // Soft stop: mute mic and silence remote audio but keep WebRTC connection alive.
+    // This avoids ICE renegotiation on the next start().
+    if (pc && pc.connectionState === 'connected' && localAudioTrack) {
+        console.log("Soft stop: muting microphone");
+        localAudioTrack.enabled = false;
+        const remoteAudio = document.getElementById("remoteAudio");
+        if (remoteAudio) remoteAudio.srcObject = null;
+        // Tell server to clear audio buffer so old TTS audio doesn't play on resume
+        if (logChannel && logChannel.readyState === 'open') {
+            logChannel.send(JSON.stringify({type: 'clear_audio'}));
+        }
+        addLogMessage('Session paused — microphone muted', 'client');
+        return;
     }
+    // Fall back to full disconnect if not connected
+    fullStop();
 }
 
 function clearLogs() {

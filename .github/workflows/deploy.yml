@@ -7,13 +7,13 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
-    
+      uses: actions/checkout@v4
+
     - name: Deploy to server via SSH
-      uses: appleboy/ssh-action@master
+      uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
@@ -21,4 +21,5 @@ jobs:
         script: |
           cd /home/ubuntu/AIRTC
           git pull origin main
-          pm2 restart airtc || pm2 start webpage/static/js/main.js --name airtc
+          pip install -r requirements.txt --quiet
+          pm2 restart airtc || pm2 start "python server.py" --name airtc --interpreter python3

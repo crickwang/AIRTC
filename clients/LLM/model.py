@@ -1,11 +1,14 @@
-from abc import ABC, abstractmethod
-from openai import OpenAI
 import asyncio
 import traceback
 import unicodedata as ucd
-from register import register
-from config.constants import TIMEOUT
+from abc import ABC, abstractmethod
+
+from openai import OpenAI
+
 from clients.utils import server_to_client
+from config.constants import TIMEOUT
+from register import register
+
 
 class LLMClient(ABC):
     def __init__(self, model: str, api_key: str, base_url: str, **kwargs):
@@ -21,10 +24,10 @@ class LLMClient(ABC):
         self.model = model
         self.api_key = api_key
         self.base_url = base_url
-        
+
     @abstractmethod
     async def generate(
-        self: object, 
+        self: object,
         input_queue: asyncio.Queue,
         output_queue: asyncio.Queue,
         stop_event: asyncio.Event,
@@ -51,10 +54,10 @@ class LLMClient(ABC):
 @register.add_model("llm", "baidu")
 class BaiduLLM(LLMClient):
     def __init__(
-        self, 
-        model: str, 
-        api_key: str, 
-        base_url: str, 
+        self,
+        model: str,
+        api_key: str,
+        base_url: str,
         **kwargs,
     ) -> None:
         '''
@@ -99,9 +102,9 @@ class BaiduLLM(LLMClient):
                 server_to_client(self.pc.log_channel, msg)
 
     def message(
-        self: object, 
-        users: list = None, 
-        system: str = None, 
+        self: object,
+        users: list = None,
+        system: str = None,
         assistants: list = None
         ) -> list:
         """
@@ -141,10 +144,10 @@ class BaiduLLM(LLMClient):
         return messages
 
     def chat(
-        self: object, 
-        users: list = None, 
-        system: str = None, 
-        assistants: list = None, 
+        self: object,
+        users: list = None,
+        system: str = None,
+        assistants: list = None,
         max_tokens: int = 512
         ) -> str:
         '''
@@ -174,14 +177,14 @@ class BaiduLLM(LLMClient):
             max_completion_tokens=max_tokens,
         )
         return chat_completion
-    
+
     async def generate(
         self: object,
-        input_queue: asyncio.Queue, 
-        output_queue: asyncio.Queue, 
+        input_queue: asyncio.Queue,
+        output_queue: asyncio.Queue,
         stop_event: asyncio.Event,
         interrupt_event: asyncio.Event,
-        system: str = None, 
+        system: str = None,
         max_tokens: int = 512,
         timeout: int = TIMEOUT,
         ) -> None:
@@ -208,7 +211,7 @@ class BaiduLLM(LLMClient):
                 texts.append(text)
                 if stop_event.is_set() or text is None:
                     await output_queue.put(None)
-                    return 
+                    return
                 print(f"LLM: Generating response for: '{text}'")
                 chat_completion = self.chat(
                     users=texts,
@@ -266,6 +269,8 @@ class BaiduLLM(LLMClient):
                 elif buffer:
                     await output_queue.put(buffer)
                 assistants.append(total_response)
+                if self.pc and total_response and not interrupt_event.is_set() and not stop_event.is_set():
+                    server_to_client(self.pc.log_channel, total_response, msg_type="response")
 
         except Exception as e:
             msg = f"LLM: Error: {e}"
@@ -280,6 +285,188 @@ class BaiduLLM(LLMClient):
             print(msg)
             if self.pc:
                 server_to_client(self.pc.log_channel, msg)
+
+@register.add_model("llm", "google")
+class GoogleLLM(LLMClient):
+    def __init__(
+        self,
+        model: str,
+        api_key: str,
+        base_url: str,
+        **kwargs,
+    ) -> None:
+        '''
+        Initialize the Google Gemini LLM client via the Google AI Studio
+        OpenAI-compatible endpoint.
+        Args:
+            model (str): Gemini model name, e.g. "gemini-2.0-flash".
+            api_key (str): Google AI Studio API key (GOOGLE_AI_API_KEY in .env).
+            base_url (str): AI Studio OpenAI-compatible base URL.
+        '''
+        self.pc = kwargs.get('pc', None)  # set first so connect() can log errors
+        super().__init__(model, api_key, base_url)
+        self.connect()
+
+    def connect(self: object) -> None:
+        '''Connect to the Google AI Studio OpenAI-compatible endpoint.'''
+        try:
+            if not self.api_key:
+                raise ValueError("GOOGLE_AI_API_KEY is not set in your .env file.")
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url,
+            )
+        except Exception as e:
+            msg = f"LLM: Error connecting to Google AI Studio: {e}"
+            print(msg)
+            if self.pc:
+                server_to_client(self.pc.log_channel, msg)
+
+    def message(
+        self: object,
+        users: list = None,
+        system: str = None,
+        assistants: list = None
+        ) -> list:
+        """Construct a list of messages for the Gemini API (same format as OpenAI)."""
+        messages = []
+        if users is None or len(users) == 0:
+            raise ValueError("Users list cannot be empty.")
+
+        if system is not None and len(system) > 0:
+            messages.append({'role': 'system', 'content': system})
+
+        if assistants is None or len(assistants) == 0:
+            if len(users) != 1:
+                raise ValueError("Please provide a single user message if "
+                                 "no assistant messages are provided.")
+            messages.append({'role': 'user', 'content': users[0]})
+        else:
+            if (len(users) - 1) != len(assistants):
+                raise ValueError("The number of user messages must match the "
+                                 "number of assistant messages + 1.")
+            messages.append({'role': 'user', 'content': users[0]})
+            for user, assistant in zip(users[1:], assistants):
+                messages.append({'role': 'assistant', 'content': assistant})
+                messages.append({'role': 'user', 'content': user})
+        return messages
+
+    def chat(
+        self: object,
+        users: list = None,
+        system: str = None,
+        assistants: list = None,
+        max_tokens: int = 512
+        ) -> str:
+        '''Stream a response from Google Gemini via AI Studio.'''
+        try:
+            messages = self.message(users=users, system=system, assistants=assistants)
+        except ValueError as e:
+            print(f"Error in constructing messages: {e}")
+            return
+        chat_completion = self.client.chat.completions.create(
+            messages=messages,
+            model=self.model,
+            stream=True,
+            max_completion_tokens=max_tokens,
+        )
+        return chat_completion
+
+    async def generate(
+        self: object,
+        input_queue: asyncio.Queue,
+        output_queue: asyncio.Queue,
+        stop_event: asyncio.Event,
+        interrupt_event: asyncio.Event,
+        system: str = None,
+        max_tokens: int = 512,
+        timeout: int = TIMEOUT,
+        ) -> None:
+        """
+        Generate responses from Google Gemini based on transcribed user input.
+        Identical pipeline to BaiduLLM: splits on punctuation before sending to TTS.
+        One key difference: Gemini's streaming may emit None content in intermediate
+        chunks, so those are skipped.
+        """
+        try:
+            texts = []
+            assistants = []
+            while not stop_event.is_set():
+                text = await asyncio.wait_for(input_queue.get(), timeout=timeout)
+                texts.append(text)
+                if stop_event.is_set() or text is None:
+                    await output_queue.put(None)
+                    return
+                print(f"LLM: Generating response for: '{text}'")
+                chat_completion = self.chat(
+                    users=texts,
+                    system=system,
+                    assistants=assistants,
+                    max_tokens=max_tokens,
+                )
+                total_response = ""
+                buffer = ""
+                for chunk in chat_completion:
+                    response = chunk.choices[0].delta.content
+                    if response is None:
+                        continue
+                    total_response += response
+                    prev = 0
+                    temp_text = ""
+                    for i in range(len(response)):
+                        char = response[i]
+                        if stop_event.is_set():
+                            await output_queue.put(None)
+                            return
+                        if interrupt_event.is_set():
+                            await output_queue.put(None)
+                            break
+                        if ucd.category(char).startswith('P') or ucd.category(char).startswith('S'):
+                            if char in ['。', '，', '！', '？', '.', ',', '!', '?']:
+                                if i < prev + 10:
+                                    response = response[:i] + ' ' + response[i+1:]
+                                    continue
+                                if buffer:
+                                    temp_text = buffer + response[prev:i]
+                                    buffer = ""
+                                else:
+                                    temp_text = response[prev:i]
+                                msg = f"LLM: Sending text into TTS: '{temp_text}'"
+                                print(msg)
+                                if self.pc:
+                                    server_to_client(self.pc.log_channel, msg)
+                                await output_queue.put(temp_text)
+                                prev = i + 1
+                            else:
+                                response = response[:i] + ' ' + response[i+1:]
+                    buffer += response[prev:]
+                    if interrupt_event.is_set():
+                        print("LLM: Interrupt event set, stopping generation")
+                        await output_queue.put(None)
+                        break
+
+                if interrupt_event.is_set():
+                    print("LLM: Interrupt event set, stopping generation")
+                    await output_queue.put(None)
+                elif buffer:
+                    await output_queue.put(buffer)
+                assistants.append(total_response)
+                if self.pc and total_response and not interrupt_event.is_set() and not stop_event.is_set():
+                    server_to_client(self.pc.log_channel, total_response, msg_type="response")
+
+        except Exception as e:
+            msg = f"LLM: Error: {e}"
+            print(msg)
+            if self.pc:
+                server_to_client(self.pc.log_channel, msg)
+            traceback.print_exc()
+        finally:
+            await output_queue.put(None)
+            msg = "LLM: end of processing"
+            print(msg)
+            if self.pc:
+                server_to_client(self.pc.log_channel, msg)
+
 
 class LLMClientFactory:
     @staticmethod
@@ -297,4 +484,4 @@ class LLMClientFactory:
         except Exception as e:
             print(f"Error creating LLM client: {e}")
             return None
-            
+

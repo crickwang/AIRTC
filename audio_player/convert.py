@@ -1,5 +1,7 @@
-from pydub import AudioSegment
 import argparse
+
+from pydub import AudioSegment
+
 
 def convert_audio(input_file, output_file, format):
     """

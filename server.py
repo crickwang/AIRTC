@@ -1,20 +1,28 @@
-from utils import *
 import asyncio
+import hashlib
 import json
 import logging
 import os
 import traceback
 import uuid
-import hashlib
 from datetime import datetime
+
 from aiohttp import web
-from aiortc import RTCPeerConnection, RTCSessionDescription, \
-                   RTCDataChannel, RTCIceServer, RTCConfiguration
+from aiortc import (
+    RTCConfiguration,
+    RTCDataChannel,
+    RTCIceServer,
+    RTCPeerConnection,
+    RTCSessionDescription,
+)
 from aiortc.contrib.media import MediaBlackhole
 from av.audio.resampler import AudioResampler
+
+from audio_player.audio_player import AudioPlayer
 from config.constants import *
 from config.logging_config import setup_logging
-from audio_player.audio_player import AudioPlayer
+from utils import *
+
 
 class WebPage:
     """
@@ -28,7 +36,7 @@ class WebPage:
         self.pcs = set()
         self.args = self.generate_args()
         self.logger.info("Logging is set up.")
-        
+
     async def index(self, request: web.Request) -> web.Response:
         """
         Serve the index HTML file.
@@ -37,9 +45,9 @@ class WebPage:
         Returns:
             web.Response: The response containing the HTML content.
         """
-        content = open(os.path.join(ROOT, "webpage/index.html"), "r", encoding="utf-8").read()
+        content = open(os.path.join(ROOT, "webpage/index.html"), encoding="utf-8").read()
         return web.Response(content_type="text/html", text=content, charset='utf-8')
-    
+
     async def introduction(self, request: web.Request) -> web.Response:
         """
         Serve the introduction HTML file.
@@ -48,9 +56,9 @@ class WebPage:
         Returns:
             web.Response: The response containing the HTML content.
         """
-        content = open(os.path.join(ROOT, "webpage/introduction.html"), "r", encoding="utf-8").read()
+        content = open(os.path.join(ROOT, "webpage/introduction.html"), encoding="utf-8").read()
         return web.Response(content_type="text/html", text=content, charset='utf-8')
-    
+
     async def generate(self, request: web.Request) -> web.Response:
         """
         Serve the generate HTML file.
@@ -59,7 +67,7 @@ class WebPage:
         Returns:
             web.Response: The response containing the HTML content.
         """
-        content = open(os.path.join(ROOT, "webpage/generate.html"), "r", encoding="utf-8").read()
+        content = open(os.path.join(ROOT, "webpage/generate.html"), encoding="utf-8").read()
         return web.Response(content_type="text/html", text=content, charset='utf-8')
 
     async def javascript(self, request: web.Request) -> web.Response:
@@ -70,7 +78,7 @@ class WebPage:
         Returns:
             web.Response: The response containing the JavaScript content.
         """
-        content = open(os.path.join(ROOT, "webpage/static/js/main.js"), "r").read()
+        content = open(os.path.join(ROOT, "webpage/static/js/main.js")).read()
         return web.Response(content_type="application/javascript", text=content)
 
     async def check_password(self, request: web.Request) -> web.Response:
@@ -102,12 +110,10 @@ class WebPage:
         else:
             pc = RTCPeerConnection(configuration=RTCConfiguration(
                     iceServers=[
-                        RTCIceServer(urls=["stun:stun.qq.com:3478",
-                                           "stun:stun.l.google.com:19302",
-                                           "stun:stun1.l.google.com:19302",
-                                           "stun:stun2.l.google.com:19302",
-                                           "stun:stun3.l.google.com:19302",
-                                           "stun:stun4.l.google.com:19302",])
+                        RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
+                        RTCIceServer(urls=["stun:stun1.l.google.com:19302"]),
+                        # Does not work outside of China
+                        # RTCIceServer(urls=["stun:stun.qq.com:3478"]),
                     ]
                 )
             )
@@ -124,51 +130,76 @@ class WebPage:
         asr_queue = asyncio.Queue(maxsize=20)
         llm_queue = asyncio.Queue(maxsize=20)
         audio_queue = asyncio.Queue(maxsize=100)
-        
+
         # Create components
         stop_event = asyncio.Event()
         interrupt_event = asyncio.Event()
         recorder = MediaBlackhole()
         audio_player = AudioPlayer(
-            audio_queue, 
-            sample_rate=AUDIO_SAMPLE_RATE, 
-            samples_per_frame=SAMPLES_PER_FRAME, 
-            format=FORMAT, 
+            audio_queue,
+            sample_rate=AUDIO_SAMPLE_RATE,
+            samples_per_frame=SAMPLES_PER_FRAME,
+            format=FORMAT,
             layout=LAYOUT,
         )
-        vad = create_client("vad", 
-                            self.args.vad, 
+        pc._audio_player = audio_player
+        vad = create_client("vad",
+                            self.args.vad,
                             threshold=VAD_THRESHOLD,
                             )
         # some ASR may require different sample rate!
-        resampler = AudioResampler(rate=ASR_SAMPLE_RATE, 
-                                   layout=LAYOUT, 
+        resampler = AudioResampler(rate=ASR_SAMPLE_RATE,
+                                   layout=LAYOUT,
                                    format=FORMAT,
                                   )
-        asr_client = create_client("asr", 
-                                   platform=self.args.asr, 
+        # Each ASR platform uses its own language code format:
+        #   google  → BCP-47 tag  e.g. "zh-CN", "en-US"  (set asr_language in config.yaml)
+        #   whisper → ISO-639-1   e.g. "zh", "en", or None for auto-detect
+        #             (set whisper_language in config.yaml; ~ / null = auto-detect)
+        asr_language_map = {
+            "whisper": WHISPER_LANGUAGE_CODES,  # None triggers Whisper's built-in auto-detect
+        }
+        asr_language = asr_language_map.get(self.args.asr, ASR_LANGUAGE)
+        asr_client = create_client("asr",
+                                   platform=self.args.asr,
                                    rate=ASR_SAMPLE_RATE,
-                                   language_code=ASR_LANGUAGE,
+                                   language_code=asr_language,
+                                   alternative_language_codes=ASR_ALTERNATIVE_LANGUAGES,
                                    chunk_size=ASR_CHUNK_SIZE,
                                    stop_word=STOP_WORD,
                                    pc=pc,
                                    )
-        llm_client = create_client("llm", 
-                                    platform=self.args.llm, 
-                                    model=LLM_MODEL, 
-                                    api_key=LLM_API_KEY, 
-                                    base_url=LLM_BASE_URL,
+        llm_credentials = {
+            "google": dict(model=GOOGLE_LLM_MODEL, api_key=GOOGLE_AI_API_KEY, base_url=GOOGLE_LLM_BASE_URL),
+            "baidu":  dict(model=LLM_MODEL, api_key=LLM_API_KEY, base_url=LLM_BASE_URL),
+        }
+        llm_cfg = llm_credentials.get(self.args.llm, llm_credentials["baidu"])
+        llm_client = create_client("llm",
+                                    platform=self.args.llm,
                                     pc=pc,
+                                    **llm_cfg,
                                     )
-        tts_client = create_client("tts", 
-                                    platform=self.args.tts, 
-                                    voice=AZURE_TTS_VOICE, 
-                                    key=AZURE_TTS_KEY, 
+        tts_client = create_client("tts",
+                                    platform=self.args.tts,
+                                    voice=AZURE_TTS_VOICE,
+                                    key=AZURE_TTS_KEY,
                                     region=AZURE_TTS_REGION,
                                     pc=pc,
                                     )
 
         pc.addTrack(audio_player)
+
+        @pc.on("datachannel")
+        def on_datachannel(channel):
+            @channel.on("message")
+            def on_message(message):
+                try:
+                    data = json.loads(message)
+                    if data.get("type") == "clear_audio" and hasattr(pc, '_audio_player'):
+                        pc._audio_player.request_interrupt()
+                        self.logger.info(f"{pc_id}: Audio buffer cleared by client request")
+                except Exception:
+                    pass
 
         @pc.on("connectionstatechange")
         async def on_connectionstatechange():
@@ -181,7 +212,7 @@ class WebPage:
                 # Cancel all tasks
                 if hasattr(pc, '_stop_event'):
                     pc._stop_event.set()
-                
+
                 tasks = []
                 for attr in ['_asr_task', '_llm_task', '_tts_task']:
                     if hasattr(pc, attr):
@@ -189,10 +220,10 @@ class WebPage:
                         if not task.done():
                             task.cancel()
                             tasks.append(task)
-                
+
                 if tasks:
                     await asyncio.gather(*tasks, return_exceptions=True)
-                
+
                 await pc.close()
                 self.pcs.discard(pc)
                 self.logger.info(f"{pc_id}: Connection cleaned up")
@@ -208,11 +239,11 @@ class WebPage:
                 try:
                     pc._asr_task = asyncio.create_task(
                         asr_client.generate(
-                            track, 
-                            asr_queue, 
-                            audio_player, 
-                            stop_event, 
-                            interrupt_event, 
+                            track,
+                            asr_queue,
+                            audio_player,
+                            stop_event,
+                            interrupt_event,
                             vad=vad,
                             resampler=resampler,
                             timeout=TIMEOUT,
@@ -221,21 +252,21 @@ class WebPage:
 
                     pc._llm_task = asyncio.create_task(
                         llm_client.generate(
-                            asr_queue, 
-                            llm_queue, 
-                            stop_event, 
-                            interrupt_event, 
-                            system=SYSTEM_PROMPT, 
-                            max_tokens=MAX_TOKENS, 
+                            asr_queue,
+                            llm_queue,
+                            stop_event,
+                            interrupt_event,
+                            system=SYSTEM_PROMPT,
+                            max_tokens=MAX_TOKENS,
                             timeout=TIMEOUT,
                         )
                     )
-                    
+
                     pc._tts_task = asyncio.create_task(
                         tts_client.generate(
-                            llm_queue, 
-                            audio_queue, 
-                            stop_event, 
+                            llm_queue,
+                            audio_queue,
+                            stop_event,
                             interrupt_event,
                             samples_per_frame=SAMPLES_PER_FRAME,
                             timeout=TIMEOUT,
@@ -258,7 +289,7 @@ class WebPage:
         # Complete WebRTC setup
         await pc.setRemoteDescription(offer)
         await recorder.start()
-        
+
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
 
@@ -266,7 +297,7 @@ class WebPage:
             content_type="application/json",
             text=json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
         )
-        
+
     async def on_shutdown(self, app: web.Application) -> None:
         """
         Handle the shutdown of the application.
@@ -312,7 +343,7 @@ class WebPage:
         parser.add_argument("--host", default="0.0.0.0", help="Host for HTTP server (default: 0.0.0.0)")
         parser.add_argument("--port", type=int, default=8081, help="Port for HTTP server (default: 8081)")
         parser.add_argument("--asr", type=str, default="google", help="ASR model to use")
-        parser.add_argument("--llm", type=str, default="baidu", help="LLM model to use")
+        parser.add_argument("--llm", type=str, default="google", help="LLM model to use")
         parser.add_argument("--tts", type=str, default="azure", help="TTS model to use")
         parser.add_argument("--vad", type=str, default="simple", help="VAD model to use")
         return parser.parse_args()

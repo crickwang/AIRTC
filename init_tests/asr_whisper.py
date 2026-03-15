@@ -1,13 +1,14 @@
-import pywhispercpp.constants
-from pywhispercpp.model import Model
-import yaml
-import pywhispercpp
-from pydub import AudioSegment
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 
-with open('asr_test.yaml', 'r', encoding='utf-8') as file:
+import pywhispercpp
+import pywhispercpp.constants
+import yaml
+from pydub import AudioSegment
+from pywhispercpp.model import Model
+
+with open('asr_test.yaml', encoding='utf-8') as file:
     config = yaml.safe_load(file)
 model_name = config.get('model', 'tiny')
 mp3_file = config.get('mp3_file')
