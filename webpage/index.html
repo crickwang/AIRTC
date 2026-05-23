@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIRTC - Login</title>
+  
+  <link href="./static/css/bootstrap.min.css" rel="stylesheet">
+  <link href="./static/css/index.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <nav class="navbar navbar-light bg-white border-bottom">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">AIRTC</a>
+      <ul class="navbar-nav flex-row ms-auto">
+        <li class="nav-item">
+          <a class="nav-link" href="introduction.html">Introduction</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="https://github.com/crickwang/AIRTC" target="_blank">GitHub</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="https://crickwang.github.io/website/" target="_blank">Portfolio</a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="form-container">
+      <form id="passwordForm">
+        <div class="input-wrapper">
+          <input type="password" class="password-input" 
+                 id="password" placeholder="Password" autocomplete="off">
+          <button type="submit" class="submit-btn">
+            <i class="arrow-icon">→</i>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="./static/js/bootstrap.bundle.min.js"></script>
+  <script src="./static/js/main.js"></script>
+  
+  <script>
+    document.getElementById('passwordForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const password = document.getElementById('password').value;
+      
+      try {
+        const response = await fetch('/check-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ password: password })
+        });
+        
+        if (response.ok && response.status === 200) {
+          document.cookie = "authorized=true; path=/; max-age=3600";
+          window.location.href = 'generate.html';
+        } else {
+          const inputWrapper = document.querySelector('.input-wrapper');
+          const passwordInput = document.getElementById('password');
+          
+          passwordInput.classList.add('error');
+          inputWrapper.classList.add('error');
+          
+          setTimeout(() => {
+            passwordInput.classList.remove('error');
+            inputWrapper.classList.remove('error');
+          }, 300);
+          
+          passwordInput.value = '';
+          passwordInput.focus();
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Connection error. Please try again.');
+      }
+    });
+  </script>
+</body>
+</html>

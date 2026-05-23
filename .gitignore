@@ -1,0 +1,39 @@
+# Environment & secrets
+.env
+key/
+
+# IDE
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+.ruff_cache/
+pyproject.toml
+
+# Logs
+logs/
+work_logs/
+*.log
+
+# Models
+model/
+references/
+
+# AI services
+asr/
+llm/
+tts/
+seamless/
+
+# Temp files
+temp.py
+foo.py
+afoo.py
+init_tests/
+
+# OpenAI legacy
+openai_realtime.py
+
+# Claude
+.claude/

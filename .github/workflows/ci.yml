@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # ── Python checks ────────────────────────────────────────────────────────────
+  python-lint:
+    name: Python lint & syntax
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install ruff
+      run: pip install ruff
+
+    - name: Ruff lint
+      run: ruff check .
+
+    - name: Ruff format check
+      run: ruff format --check .
+
+    - name: Syntax check (core modules)
+      run: |
+        python -m py_compile server.py
+        python -m py_compile config/settings.py
+        python -m py_compile config/constants.py
+        python -m py_compile clients/utils.py
+        python -m py_compile register.py
+
+  # ── Config validation ────────────────────────────────────────────────────────
+  config-check:
+    name: Validate config.yaml
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install PyYAML
+      run: pip install pyyaml
+
+    - name: Validate required keys
+      run: |
+        python -c "
+        import yaml
+        with open('config/config.yaml') as f:
+            cfg = yaml.safe_load(f)
+        required = ['llm_system_prompt', 'llm_model', 'stop_word', 'asr_language',
+                    'google_llm_model', 'BAIDU_AISTUDIO_BASE_URL']
+        missing = [k for k in required if k not in cfg]
+        if missing:
+            raise SystemExit(f'Missing required config keys: {missing}')
+        print('config.yaml OK — keys present:', required)
+        "
+
+  # ── JavaScript checks ────────────────────────────────────────────────────────
+  js-lint:
+    name: JavaScript lint (ESLint)
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: "npm"
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: ESLint
+      run: npm run lint
