@@ -3,7 +3,7 @@
 ([简体中文](./README_zh.md) | English)
 
 ## Summary
-AIRTC is a high-performance, real-time communication framework designed for low-latency audio streaming. It leverages advanced LLM technologies to provide a seamless communication experience AI and human.
+AIRTC is a public high-performance, real-time communication framework designed for low-latency audio streaming. It leverages advanced LLM technologies to provide a seamless communication experience AI and human.
 
 [**Summary**](#summary) | 
 [**Requirements**](#requirements) | 
