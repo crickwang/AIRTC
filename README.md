@@ -7,8 +7,8 @@ AIRTC is a high-performance, real-time communication framework designed for low-
 
 [**Summary**](#summary) | 
 [**Requirements**](#requirements) | 
-[**Quick Start**](#quick-start) |
-[**Client Setup**](#client-setup) |
+[**Quick Start**](#quick-start) | 
+[**Client Setup**](#client-setup) | 
 [**Password Setup**](#password-setup)
 
 <a name="requirements"></a>
