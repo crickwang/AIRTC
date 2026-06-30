@@ -86,7 +86,7 @@ def create_user(username: str, password: str):
             raise ValueError("Username already exists") from exc
 
         user_id = cursor.lastrowid
-        return get_user_by_id(user_id)
+    return get_user_by_id(user_id)
 
 
 def get_user_by_username(username: str):
