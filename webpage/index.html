@@ -31,13 +31,24 @@
 
   <div class="main-content">
     <div class="form-container">
-      <form id="passwordForm">
-        <div class="input-wrapper">
-          <input type="password" class="password-input" 
-                 id="password" placeholder="Password" autocomplete="off">
-          <button type="submit" class="submit-btn">
-            <i class="arrow-icon">→</i>
-          </button>
+      <form id="authForm" class="auth-form">
+        <div class="auth-card">
+          <div class="auth-title-row">
+            <h1>Welcome back</h1>
+            <p>Sign in or create an account to continue.</p>
+          </div>
+
+          <div class="auth-fields">
+            <input type="text" class="auth-input" id="username" placeholder="Username" autocomplete="username">
+            <input type="password" class="auth-input" id="password" placeholder="Password" autocomplete="current-password">
+          </div>
+
+          <div class="auth-actions">
+            <button type="button" class="auth-btn secondary" id="signupButton">Sign up</button>
+            <button type="submit" class="auth-btn primary" id="loginButton">Sign in</button>
+          </div>
+
+          <div class="auth-message" id="authMessage" aria-live="polite"></div>
         </div>
       </form>
     </div>
@@ -47,42 +58,55 @@
   <script src="./static/js/main.js"></script>
   
   <script>
-    document.getElementById('passwordForm').addEventListener('submit', async function(e) {
-      e.preventDefault();
-      
+    const authForm = document.getElementById('authForm');
+    const signupButton = document.getElementById('signupButton');
+    const authMessage = document.getElementById('authMessage');
+
+    function setMessage(message, isError = true) {
+      authMessage.textContent = message;
+      authMessage.className = isError ? 'auth-message error' : 'auth-message success';
+    }
+
+    async function submitAuth(endpoint) {
+      const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
-      
+
+      if (!username || !password) {
+        setMessage('Enter both username and password.');
+        return;
+      }
+
       try {
-        const response = await fetch('/check-password', {
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ password: password })
+          body: JSON.stringify({ username, password })
         });
-        
-        if (response.ok && response.status === 200) {
-          document.cookie = "authorized=true; path=/; max-age=3600";
+
+        const payload = await response.json();
+
+        if (response.ok) {
+          setMessage('Authentication successful.', false);
           window.location.href = 'generate.html';
-        } else {
-          const inputWrapper = document.querySelector('.input-wrapper');
-          const passwordInput = document.getElementById('password');
-          
-          passwordInput.classList.add('error');
-          inputWrapper.classList.add('error');
-          
-          setTimeout(() => {
-            passwordInput.classList.remove('error');
-            inputWrapper.classList.remove('error');
-          }, 300);
-          
-          passwordInput.value = '';
-          passwordInput.focus();
+          return;
         }
+
+        setMessage(payload.message || 'Authentication failed.');
       } catch (error) {
         console.error('Error:', error);
-        alert('Connection error. Please try again.');
+        setMessage('Connection error. Please try again.');
       }
+    }
+
+    authForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      await submitAuth('/login');
+    });
+
+    signupButton.addEventListener('click', async function() {
+      await submitAuth('/signup');
     });
   </script>
 </body>

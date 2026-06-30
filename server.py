@@ -19,6 +19,7 @@ from aiortc.contrib.media import MediaBlackhole
 from av.audio.resampler import AudioResampler
 
 from audio_player.audio_player import AudioPlayer
+from auth_store import authenticate_user, create_session, create_user, get_session_user, init_auth_db
 from config.constants import *
 from config.logging_config import setup_logging
 from utils import *
@@ -35,7 +36,23 @@ class WebPage:
         self.logger = logging.getLogger(__name__)
         self.pcs = set()
         self.args = self.generate_args()
+        init_auth_db()
         self.logger.info("Logging is set up.")
+
+    def _set_session_cookie(self, response: web.StreamResponse, request: web.Request, token: str):
+        response.set_cookie(
+            "session_token",
+            token,
+            max_age=3600,
+            httponly=True,
+            samesite="Lax",
+            secure=request.secure,
+            path="/",
+        )
+
+    def _get_current_user(self, request: web.Request):
+        token = request.cookies.get("session_token")
+        return get_session_user(token)
 
     async def index(self, request: web.Request) -> web.Response:
         """
@@ -67,6 +84,9 @@ class WebPage:
         Returns:
             web.Response: The response containing the HTML content.
         """
+        if self._get_current_user(request) is None:
+            raise web.HTTPFound("/")
+
         content = open(os.path.join(ROOT, "webpage/generate.html"), encoding="utf-8").read()
         return web.Response(content_type="text/html", text=content, charset='utf-8')
 
@@ -89,12 +109,35 @@ class WebPage:
         Returns:
             web.Response: The response indicating success or failure.
         """
+        return await self.login(request)
+
+    async def login(self, request: web.Request) -> web.Response:
         params = await request.json()
-        password = params.get('password', '')
-        if hashlib.sha256(password.encode()).hexdigest() == os.getenv('SECRET_KEY'):
-            return web.Response(status=200)
-        else:
-            return web.Response(status=403)
+        username = params.get("username", "")
+        password = params.get("password", "")
+        user = authenticate_user(username, password)
+        if user is None:
+            return web.json_response({"ok": False, "message": "Invalid username or password"}, status=403)
+
+        token = create_session(user["id"])
+        response = web.json_response({"ok": True, "username": user["username"]})
+        self._set_session_cookie(response, request, token)
+        return response
+
+    async def signup(self, request: web.Request) -> web.Response:
+        params = await request.json()
+        username = params.get("username", "")
+        password = params.get("password", "")
+
+        try:
+            user = create_user(username, password)
+        except ValueError as exc:
+            return web.json_response({"ok": False, "message": str(exc)}, status=400)
+
+        token = create_session(user["id"])
+        response = web.json_response({"ok": True, "username": user["username"]}, status=201)
+        self._set_session_cookie(response, request, token)
+        return response
 
     async def offer(self, request: web.Request) -> web.Response:
         """
@@ -322,6 +365,8 @@ class WebPage:
         app.router.add_get("/generate.html", self.generate)
         app.router.add_post("/offer", self.offer)
         app.router.add_post("/check-password", self.check_password)
+        app.router.add_post("/login", self.login)
+        app.router.add_post("/signup", self.signup)
         app.router.add_static("/static/", path=os.path.join(ROOT, "webpage", "static"), show_index=True)
         if PORT:
             port = int(PORT)
