@@ -34,8 +34,8 @@
       <form id="authForm" class="auth-form">
         <div class="auth-card">
           <div class="auth-title-row">
-            <h1>Welcome back</h1>
-            <p>Sign in or create an account to continue.</p>
+            <h1 id="authTitle">Welcome to AIRTC</h1>
+            <p id="authSubtitle">Log in or create an account to continue.</p>
           </div>
 
           <div class="auth-fields">
@@ -44,9 +44,10 @@
           </div>
 
           <div class="auth-actions">
-            <button type="button" class="auth-btn secondary" id="signupButton">Sign up</button>
-            <button type="submit" class="auth-btn primary" id="loginButton">Sign in</button>
+            <button type="submit" class="auth-btn primary" id="authSubmitButton">Log in</button>
           </div>
+
+          <p class="auth-toggle"><a href="#" id="authToggleLink">Don't have an account? Sign up</a></p>
 
           <div class="auth-message" id="authMessage" aria-live="polite"></div>
         </div>
@@ -59,13 +60,39 @@
   
   <script>
     const authForm = document.getElementById('authForm');
-    const signupButton = document.getElementById('signupButton');
+    const authTitle = document.getElementById('authTitle');
+    const authSubtitle = document.getElementById('authSubtitle');
+    const authSubmitButton = document.getElementById('authSubmitButton');
+    const authToggleLink = document.getElementById('authToggleLink');
     const authMessage = document.getElementById('authMessage');
+
+    let mode = 'login';
 
     function setMessage(message, isError = true) {
       authMessage.textContent = message;
       authMessage.className = isError ? 'auth-message error' : 'auth-message success';
     }
+
+    function applyMode() {
+      if (mode === 'signup') {
+        authTitle.textContent = 'Create an account';
+        authSubtitle.textContent = 'Sign up to get started.';
+        authSubmitButton.textContent = 'Sign up';
+        authToggleLink.textContent = 'Already have an account? Log in';
+      } else {
+        authTitle.textContent = 'Welcome to AIRTC';
+        authSubtitle.textContent = 'Log in or create an account to continue.';
+        authSubmitButton.textContent = 'Log in';
+        authToggleLink.textContent = "Don't have an account? Sign up";
+      }
+      setMessage('', false);
+    }
+
+    authToggleLink.addEventListener('click', function(e) {
+      e.preventDefault();
+      mode = mode === 'signup' ? 'login' : 'signup';
+      applyMode();
+    });
 
     async function submitAuth(endpoint) {
       const username = document.getElementById('username').value.trim();
@@ -93,7 +120,7 @@
           return;
         }
 
-        setMessage(payload.message || 'Authentication failed.');
+        setMessage(payload.message || (mode === 'signup' ? 'Sign up failed.' : 'Log in failed.'));
       } catch (error) {
         console.error('Error:', error);
         setMessage('Connection error. Please try again.');
@@ -102,11 +129,7 @@
 
     authForm.addEventListener('submit', async function(e) {
       e.preventDefault();
-      await submitAuth('/login');
-    });
-
-    signupButton.addEventListener('click', async function() {
-      await submitAuth('/signup');
+      await submitAuth(mode === 'signup' ? '/signup' : '/login');
     });
   </script>
 </body>

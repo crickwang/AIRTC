@@ -136,6 +136,21 @@ body {
   transform: scale(0.98);
 }
 
+.auth-toggle {
+  margin: 1rem 0 0 0;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.auth-toggle a {
+  color: #0d6efd;
+  text-decoration: none;
+}
+
+.auth-toggle a:hover {
+  text-decoration: underline;
+}
+
 .auth-message {
   min-height: 1.25rem;
   margin-top: 1rem;

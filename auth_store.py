@@ -1,16 +1,43 @@
 import base64
 import hashlib
+import logging
+import os
 import secrets
 import sqlite3
 from pathlib import Path
 
 from config.settings import ROOT
-
+from supabase import create_client
 
 DB_PATH = Path(ROOT) / "auth.db"
 PBKDF2_ITERATIONS = 200_000
 SESSION_TTL_SECONDS = 3600
+DEFAULT_CONVERSATION_LIMIT = 30
 
+logger = logging.getLogger(__name__)
+
+
+def backup_to_supabase():
+    """
+    Upload the current auth.db file to Supabase Storage, overwriting the previous backup.
+
+    No-op if SUPABASE_URL/SUPABASE_KEY aren't set, so this stays silent for anyone
+    who hasn't set up Supabase yet. Failures are logged, never raised.
+    """
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    if not supabase_url or not supabase_key:
+        return
+
+    bucket = os.getenv("SUPABASE_BACKUP_BUCKET", "backups")
+    try:
+        client = create_client(supabase_url, supabase_key)
+        with open(DB_PATH, "rb") as f:
+            client.storage.from_(bucket).upload(
+                "auth.db", f, {"upsert": "true"}
+            )
+    except Exception:
+        logger.warning("Supabase backup upload failed", exc_info=True)
 
 def _connect():
     conn = sqlite3.connect(DB_PATH)
@@ -18,20 +45,23 @@ def _connect():
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
-
 def init_auth_db():
     with _connect() as conn:
+        # users table stores user credentials and metadata
         conn.execute(
-            """
+            f"""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
                 password_salt TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                conversation_count INTEGER NOT NULL DEFAULT 0,
+                conversation_limit INTEGER NOT NULL DEFAULT {DEFAULT_CONVERSATION_LIMIT}
             )
             """
         )
+        # sessions table stores active user sessions
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS sessions (
@@ -86,7 +116,9 @@ def create_user(username: str, password: str):
             raise ValueError("Username already exists") from exc
 
         user_id = cursor.lastrowid
-    return get_user_by_id(user_id)
+    user = get_user_by_id(user_id)
+    backup_to_supabase()
+    return user
 
 
 def get_user_by_username(username: str):
@@ -147,3 +179,32 @@ def get_session_user(token: str):
             conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
 
         return session
+
+
+def get_conversation_usage(user_id: int) -> tuple[int, int]:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT conversation_count, conversation_limit FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    return (row["conversation_count"], row["conversation_limit"]) if row else (0, 0)
+
+
+def increment_conversation_count(user_id: int):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET conversation_count = conversation_count + 1 WHERE id = ?",
+            (user_id,),
+        )
+
+
+def set_conversation_limit(username: str, new_limit: int):
+    """Override a specific account's conversation limit, e.g. for your own testing account."""
+    normalized_username = _normalize_username(username)
+    with _connect() as conn:
+        cursor = conn.execute(
+            "UPDATE users SET conversation_limit = ? WHERE username = ?",
+            (new_limit, normalized_username),
+        )
+        if cursor.rowcount == 0:
+            raise ValueError("Username not found")

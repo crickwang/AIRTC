@@ -19,7 +19,16 @@ from aiortc.contrib.media import MediaBlackhole
 from av.audio.resampler import AudioResampler
 
 from audio_player.audio_player import AudioPlayer
-from auth_store import authenticate_user, create_session, create_user, get_session_user, init_auth_db
+from auth_store import (
+    authenticate_user,
+    backup_to_supabase,
+    create_session,
+    create_user,
+    get_conversation_usage,
+    get_session_user,
+    increment_conversation_count,
+    init_auth_db,
+)
 from config.constants import *
 from config.logging_config import setup_logging
 from utils import *
@@ -37,6 +46,7 @@ class WebPage:
         self.pcs = set()
         self.args = self.generate_args()
         init_auth_db()
+        backup_to_supabase()
         self.logger.info("Logging is set up.")
 
     def _set_session_cookie(self, response: web.StreamResponse, request: web.Request, token: str):
@@ -143,6 +153,15 @@ class WebPage:
         """
         Manage WebRTC connection.
         """
+        user = self._get_current_user(request)
+        if user is None:
+            return web.json_response({"ok": False, "message": "Not authenticated"}, status=401)
+
+        conversation_count, conversation_limit = get_conversation_usage(user["id"])
+        if conversation_count >= conversation_limit:
+            return web.json_response({"ok": False, "message": "Conversation limit reached"}, status=429)
+        increment_conversation_count(user["id"])
+
         params = await request.json()
         processing_mode = params.get("processingMode", "local")
         # located in js
@@ -157,6 +176,15 @@ class WebPage:
                         RTCIceServer(urls=["stun:stun1.l.google.com:19302"]),
                         # Does not work outside of China
                         # RTCIceServer(urls=["stun:stun.qq.com:3478"]),
+                        RTCIceServer(
+                            urls=[
+                                "turn:relay.metered.ca:80",
+                                "turn:relay.metered.ca:443",
+                                "turn:relay.metered.ca:443?transport=tcp",
+                            ],
+                            username=os.getenv("TURN_USERNAME"),
+                            credential=os.getenv("TURN_CREDENTIAL"),
+                        ),
                     ]
                 )
             )

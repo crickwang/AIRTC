@@ -37,3 +37,6 @@ openai_realtime.py
 
 # Claude
 .claude/
+
+# Local-only notes
+HISTORY.md

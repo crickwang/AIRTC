@@ -298,7 +298,7 @@ function negotiate() {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ 
+            body: JSON.stringify({  
                 sdp: offer.sdp, 
                 type: offer.type,
                 processingMode: processingMode
