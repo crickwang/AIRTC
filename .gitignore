@@ -1,6 +1,8 @@
 # Environment & secrets
 .env
 key/
+auth.db
+auth.dev.db
 
 # IDE
 .idea/

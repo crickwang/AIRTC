@@ -20,10 +20,13 @@ from av.audio.resampler import AudioResampler
 
 from audio_player.audio_player import AudioPlayer
 from auth_store import (
+    add_message,
     authenticate_user,
     backup_to_supabase,
+    create_conversation,
     create_session,
     create_user,
+    end_conversation,
     get_conversation_usage,
     get_session_user,
     increment_conversation_count,
@@ -32,6 +35,46 @@ from auth_store import (
 from config.constants import *
 from config.logging_config import setup_logging
 from utils import *
+
+
+class TranscriptLoggingQueue(asyncio.Queue):
+    """Wraps the ASR->LLM queue to persist each final transcript as a user message."""
+
+    def __init__(self, conversation_id, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._conversation_id = conversation_id
+
+    async def put(self, item):
+        if item:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, add_message, self._conversation_id, "user", item)
+        await super().put(item)
+
+
+class ResponseLoggingQueue(asyncio.Queue):
+    """
+    Wraps the LLM->TTS queue to persist each streamed response as one assistant message.
+
+    LLM output arrives as chunks with a trailing None marking the end of a turn, so chunks
+    are buffered and saved as a single message once the None terminator is seen.
+    """
+
+    def __init__(self, conversation_id, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._conversation_id = conversation_id
+        self._buffer = ""
+
+    async def put(self, item):
+        if item is None:
+            if self._buffer:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    None, add_message, self._conversation_id, "assistant", self._buffer
+                )
+                self._buffer = ""
+        else:
+            self._buffer += item
+        await super().put(item)
 
 
 class WebPage:
@@ -161,6 +204,7 @@ class WebPage:
         if conversation_count >= conversation_limit:
             return web.json_response({"ok": False, "message": "Conversation limit reached"}, status=429)
         increment_conversation_count(user["id"])
+        conversation_id = create_conversation(user["id"])
 
         params = await request.json()
         processing_mode = params.get("processingMode", "local")
@@ -198,8 +242,8 @@ class WebPage:
         # asr_queue: transfer results of ASR to LLM
         # llm_queue: transfer results of LLM to TTS
         # audio_queue: transfer audio data from TTS to WebRTC browser player
-        asr_queue = asyncio.Queue(maxsize=20)
-        llm_queue = asyncio.Queue(maxsize=20)
+        asr_queue = TranscriptLoggingQueue(conversation_id, maxsize=20)
+        llm_queue = ResponseLoggingQueue(conversation_id, maxsize=20)
         audio_queue = asyncio.Queue(maxsize=100)
 
         # Create components
@@ -297,6 +341,8 @@ class WebPage:
 
                 await pc.close()
                 self.pcs.discard(pc)
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, end_conversation, conversation_id)
                 self.logger.info(f"{pc_id}: Connection cleaned up")
 
         @pc.on("track")

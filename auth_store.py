@@ -9,7 +9,8 @@ from pathlib import Path
 from config.settings import ROOT
 from supabase import create_client
 
-DB_PATH = Path(ROOT) / "auth.db"
+APP_ENV = os.getenv("APP_ENV", "development")
+DB_PATH = Path(ROOT) / ("auth.db" if APP_ENV == "production" else "auth.dev.db")
 PBKDF2_ITERATIONS = 200_000
 SESSION_TTL_SECONDS = 3600
 DEFAULT_CONVERSATION_LIMIT = 30
@@ -23,7 +24,13 @@ def backup_to_supabase():
 
     No-op if SUPABASE_URL/SUPABASE_KEY aren't set, so this stays silent for anyone
     who hasn't set up Supabase yet. Failures are logged, never raised.
+
+    Also a no-op outside APP_ENV=production, so local/dev runs never overwrite the
+    real backup with a dev database.
     """
+    if APP_ENV != "production":
+        return
+
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_KEY")
     if not supabase_url or not supabase_key:
@@ -70,6 +77,31 @@ def init_auth_db():
                 created_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        # conversations table stores one row per WebRTC call
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                started_at TEXT NOT NULL,
+                ended_at TEXT,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        # messages table stores each ASR transcript / LLM response within a conversation
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
             )
             """
         )
@@ -208,3 +240,30 @@ def set_conversation_limit(username: str, new_limit: int):
         )
         if cursor.rowcount == 0:
             raise ValueError("Username not found")
+
+
+def create_conversation(user_id: int) -> int:
+    with _connect() as conn:
+        cursor = conn.execute(
+            "INSERT INTO conversations (user_id, started_at) VALUES (?, datetime('now'))",
+            (user_id,),
+        )
+    return cursor.lastrowid
+
+
+def end_conversation(conversation_id: int):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE conversations SET ended_at = datetime('now') WHERE id = ? AND ended_at IS NULL",
+            (conversation_id,),
+        )
+
+
+def add_message(conversation_id: int, role: str, content: str):
+    if not content:
+        return
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, ?, ?, datetime('now'))",
+            (conversation_id, role, content),
+        )
