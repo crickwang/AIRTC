@@ -222,6 +222,11 @@ class BaiduLLM(LLMClient):
                 total_response = ""
                 # Buffer for combining small chunks
                 buffer = ""
+                # Local, one-way latch: once true, stays true for this turn regardless of
+                # what interrupt_event does afterward (it gets cleared by the ASR task as
+                # soon as it captures the *next* turn's transcript, which can race past the
+                # awaits below and unset interrupt_event before we re-check it).
+                was_interrupted = False
                 for chunk in chat_completion:
                     response = chunk.choices[0].delta.content
                     total_response += response
@@ -235,6 +240,7 @@ class BaiduLLM(LLMClient):
                             await output_queue.put(None)
                             return
                         if interrupt_event.is_set():
+                            was_interrupted = True
                             await output_queue.put(None)
                             break
                         # skip any other characters
@@ -258,18 +264,19 @@ class BaiduLLM(LLMClient):
                             else:
                                 response = response[:i] + ' ' + response[i+1:]
                     buffer += response[prev:]
-                    if interrupt_event.is_set():
+                    if was_interrupted or interrupt_event.is_set():
+                        was_interrupted = True
                         print("LLM: Interrupt event set, stopping generation")
                         await output_queue.put(None)
                         break
 
-                if interrupt_event.is_set():
+                if was_interrupted:
                     print("LLM: Interrupt event set, stopping generation")
                     await output_queue.put(None)
                 elif buffer:
                     await output_queue.put(buffer)
                 assistants.append(total_response)
-                if self.pc and total_response and not interrupt_event.is_set() and not stop_event.is_set():
+                if self.pc and total_response and not was_interrupted and not stop_event.is_set():
                     server_to_client(self.pc.log_channel, total_response, msg_type="response")
 
         except Exception as e:
@@ -406,6 +413,11 @@ class GoogleLLM(LLMClient):
                 )
                 total_response = ""
                 buffer = ""
+                # Local, one-way latch: once true, stays true for this turn regardless of
+                # what interrupt_event does afterward (it gets cleared by the ASR task as
+                # soon as it captures the *next* turn's transcript, which can race past the
+                # awaits below and unset interrupt_event before we re-check it).
+                was_interrupted = False
                 for chunk in chat_completion:
                     response = chunk.choices[0].delta.content
                     if response is None:
@@ -419,6 +431,7 @@ class GoogleLLM(LLMClient):
                             await output_queue.put(None)
                             return
                         if interrupt_event.is_set():
+                            was_interrupted = True
                             await output_queue.put(None)
                             break
                         if ucd.category(char).startswith('P') or ucd.category(char).startswith('S'):
@@ -440,18 +453,19 @@ class GoogleLLM(LLMClient):
                             else:
                                 response = response[:i] + ' ' + response[i+1:]
                     buffer += response[prev:]
-                    if interrupt_event.is_set():
+                    if was_interrupted or interrupt_event.is_set():
+                        was_interrupted = True
                         print("LLM: Interrupt event set, stopping generation")
                         await output_queue.put(None)
                         break
 
-                if interrupt_event.is_set():
+                if was_interrupted:
                     print("LLM: Interrupt event set, stopping generation")
                     await output_queue.put(None)
                 elif buffer:
                     await output_queue.put(buffer)
                 assistants.append(total_response)
-                if self.pc and total_response and not interrupt_event.is_set() and not stop_event.is_set():
+                if self.pc and total_response and not was_interrupted and not stop_event.is_set():
                     server_to_client(self.pc.log_channel, total_response, msg_type="response")
 
         except Exception as e:
