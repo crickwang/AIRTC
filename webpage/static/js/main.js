@@ -21,6 +21,17 @@ function appendToTranscription(text, role) {
     box.scrollTop = box.scrollHeight;
 }
 
+// Toggle the connecting spinner/label on the Start button while the initial
+// handshake (getUserMedia -> offer/answer -> ICE) is in flight.
+function setConnecting(isConnecting) {
+    const button = document.getElementById('startButton');
+    const label = document.getElementById('startButtonLabel');
+    if (!button) return;
+    button.classList.toggle('connecting', isConnecting);
+    button.disabled = isConnecting;
+    if (label) label.textContent = isConnecting ? 'Connecting...' : 'Start';
+}
+
 // Add log message to the frontend
 function addLogMessage(message, type = 'info') {
     const logContainer = document.getElementById('logContainer');
@@ -119,10 +130,12 @@ function createPeerConnection(mode = 'local') {
     pc.onconnectionstatechange = () => {
         console.log("Connection state:", pc.connectionState);
         if (["disconnected", "failed", "closed"].includes(pc.connectionState)) {
+            setConnecting(false);
             fullStop();
         }
 
         else if (pc.connectionState === "connected") {
+            setConnecting(false);
             addLogMessage("WebRTC connection established, Start Speaking", 'client');
         }
     };
@@ -316,6 +329,8 @@ function negotiate() {
         console.log("Negotiation complete!");
     }).catch((error) => {
         console.error("Negotiation failed:", error);
+        setConnecting(false);
+        addLogMessage('Failed to connect: ' + error.message, 'error');
     });
 }
 
@@ -345,6 +360,8 @@ function start() {
     // Get the selected processing mode
     const processingMode = getProcessingMode();
     addLogMessage(`Starting with ${processingMode} processing mode`, 'info');
+
+    setConnecting(true);
 
     // Ensure audio context is created on user interaction
     ensureAudioContext();
@@ -394,6 +411,7 @@ function start() {
         .catch((err) => {
             console.error("Failed to access microphone:", err);
             alert("Failed to access microphone: " + err.message);
+            setConnecting(false);
         });
 }
 
