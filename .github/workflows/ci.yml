@@ -2,9 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [ develop ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 jobs:
   # ── Python checks ────────────────────────────────────────────────────────────
@@ -35,6 +34,24 @@ jobs:
         python -m py_compile config/constants.py
         python -m py_compile clients/utils.py
         python -m py_compile register.py
+
+  # ── Python tests ─────────────────────────────────────────────────────────────
+  python-test:
+    name: Auth store tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install dependencies
+      run: pip install pytest pyyaml python-dotenv supabase
+
+    - name: Run auth store tests
+      run: pytest test_auth_store.py -v
 
   # ── Config validation ────────────────────────────────────────────────────────
   config-check:
