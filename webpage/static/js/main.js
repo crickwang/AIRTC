@@ -2,23 +2,92 @@
 let pc = null;
 let localStream = null;
 let localAudioTrack = null;
+let audioSender = null;
 let audioContext = null;
 let logChannel = null;
+let silentTrack = null;
+let silentAudioSource = null;
 
-// Append a labeled entry to the transcription box
+// Build a MediaStreamTrack that continuously emits very low-amplitude noise (not pure
+// silence) instead of relying on the mic track's own `enabled = false`. Disabling a real
+// track only signals "send silence" — the browser is free to throttle or stop actually
+// transmitting it (e.g. via Opus DTX), which can let NAT/relay bindings on the media path
+// go idle and drop. A synthetic track that's always genuinely producing audio keeps real
+// packets flowing the whole time we're "paused," independent of whatever the browser
+// decides to do with a disabled capture track. Low-level noise (not exact zeros) is used
+// so the encoder has no grounds to invoke DTX on this track either.
+function getSilentTrack() {
+    if (silentTrack) return silentTrack;
+
+    const ctx = ensureAudioContext();
+    const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+        data[i] = (Math.random() * 2 - 1) * 0.0005; // inaudible, but non-zero
+    }
+
+    silentAudioSource = ctx.createBufferSource();
+    silentAudioSource.buffer = buffer;
+    silentAudioSource.loop = true;
+
+    const destination = ctx.createMediaStreamDestination();
+    silentAudioSource.connect(destination);
+    silentAudioSource.start();
+
+    silentTrack = destination.stream.getAudioTracks()[0];
+    return silentTrack;
+}
+
+function stopSilentTrack() {
+    if (silentAudioSource) {
+        try {
+            silentAudioSource.stop();
+        } catch (e) {
+            // already stopped
+        }
+        silentAudioSource.disconnect();
+        silentAudioSource = null;
+    }
+    if (silentTrack) {
+        silentTrack.stop();
+        silentTrack = null;
+    }
+}
+
+// True when the box is already scrolled at (or near) its bottom edge.
+// Threshold is generous because the browser's native smooth-scroll doesn't always land
+// exactly at its target (observed ~70px short in testing), and a tight threshold would
+// make the very next message think the user had scrolled away, breaking auto-follow.
+function isScrolledToBottom(box, threshold = 120) {
+    return box.scrollHeight - box.scrollTop - box.clientHeight <= threshold;
+}
+
+// Append a chat bubble to the transcription box: user on the right, AI on the left.
 function appendToTranscription(text, role) {
     const box = document.getElementById('transcriptionBox');
     if (!box) return;
-    const entry = document.createElement('p');
-    if (role === 'user') {
-        entry.textContent = 'You: ' + text;
-        entry.style.cssText = 'margin: 6px 0; color: #2b6cb0; font-weight: 500;';
-    } else {
-        entry.textContent = 'AI: ' + text;
-        entry.style.cssText = 'margin: 6px 0; color: #276749; font-weight: 500;';
+
+    // Only auto-follow new messages if the user was already at the bottom —
+    // otherwise a live conversation keeps yanking them back down while they read up.
+    const wasAtBottom = isScrolledToBottom(box);
+
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble ' + (role === 'user' ? 'user' : 'ai');
+
+    const roleLabel = document.createElement('span');
+    roleLabel.className = 'chat-role';
+    roleLabel.textContent = role === 'user' ? 'You' : 'AI';
+
+    const body = document.createElement('span');
+    body.textContent = text;
+
+    bubble.appendChild(roleLabel);
+    bubble.appendChild(body);
+    box.appendChild(bubble);
+
+    if (wasAtBottom) {
+        box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
     }
-    box.appendChild(entry);
-    box.scrollTop = box.scrollHeight;
 }
 
 // Toggle the connecting spinner/label on the Start button while the initial
@@ -30,6 +99,15 @@ function setConnecting(isConnecting) {
     button.classList.toggle('connecting', isConnecting);
     button.disabled = isConnecting;
     if (label) label.textContent = isConnecting ? 'Connecting...' : 'Start';
+}
+
+// Toggle the persistent recording indicator (pulsing dot + label). On whenever the mic's
+// real audio is actually being sent to the server — after connect, after resuming from a
+// pause — off whenever it won't be, e.g. paused or disconnected.
+function setRecordingIndicator(isRecording) {
+    const status = document.getElementById('recordingStatus');
+    if (!status) return;
+    status.classList.toggle('active', isRecording);
 }
 
 // Add log message to the frontend
@@ -136,7 +214,8 @@ function createPeerConnection(mode = 'local') {
 
         else if (pc.connectionState === "connected") {
             setConnecting(false);
-            addLogMessage("WebRTC connection established, Start Speaking", 'client');
+            addLogMessage("WebRTC connection established — you may now speak", 'client');
+            setRecordingIndicator(true);
         }
     };
 
@@ -340,8 +419,13 @@ function start() {
     // Soft restart: PC is still connected, mic was only muted — just unmute.
     if (pc && pc.connectionState === 'connected' && localAudioTrack && !localAudioTrack.enabled) {
         localAudioTrack.enabled = true;
+        if (audioSender) {
+            audioSender.replaceTrack(localAudioTrack)
+                .catch(e => console.error("Failed to restore microphone track:", e));
+        }
         console.log("Soft restart: microphone unmuted");
-        addLogMessage('Session resumed — microphone active', 'client');
+        addLogMessage('Session resumed — you may now speak', 'client');
+        setRecordingIndicator(true);
         // Re-attach remote audio stream if needed
         const remoteAudio = document.getElementById("remoteAudio");
         if (remoteAudio && !remoteAudio.srcObject) {
@@ -403,6 +487,9 @@ function start() {
             stream.getTracks().forEach(track => {
                 console.log("Adding track to PC:", track.kind);
                 const sender = pc.addTrack(track, stream);
+                if (track.kind === 'audio') {
+                    audioSender = sender;
+                }
                 console.log("Track added, sender:", sender);
             });
             
@@ -426,6 +513,9 @@ function fullStop() {
         localStream = null;
         localAudioTrack = null;
     }
+    stopSilentTrack();
+    audioSender = null;
+    setRecordingIndicator(false);
     if (pc) {
         pc.close();
         pc = null;
@@ -444,6 +534,11 @@ function stop() {
     if (pc && pc.connectionState === 'connected' && localAudioTrack) {
         console.log("Soft stop: muting microphone");
         localAudioTrack.enabled = false;
+        setRecordingIndicator(false);
+        if (audioSender) {
+            audioSender.replaceTrack(getSilentTrack())
+                .catch(e => console.error("Failed to switch to silent track:", e));
+        }
         const remoteAudio = document.getElementById("remoteAudio");
         if (remoteAudio) remoteAudio.srcObject = null;
         // Tell server to clear audio buffer so old TTS audio doesn't play on resume
