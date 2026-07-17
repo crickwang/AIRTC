@@ -23,6 +23,9 @@ def setup_logging(level=logging.INFO) -> None:
     console.setFormatter(formatter)
     logging.getLogger().addHandler(console)
 
-    # Silence noisy third-party WebRTC/ICE libraries
+    # Silence noisy third-party WebRTC/ICE libraries by default (they log every
+    # ICE connectivity check and ~5s consent-freshness check per connection).
+    # Set WEBRTC_DEBUG=1 to see them at INFO level when debugging connection drops.
+    webrtc_level = logging.INFO if os.getenv("WEBRTC_DEBUG") else logging.WARNING
     for noisy_logger in ("aioice", "aiortc", "aioice.ice"):
-        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+        logging.getLogger(noisy_logger).setLevel(webrtc_level)
