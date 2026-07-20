@@ -60,6 +60,7 @@
   
   <script>
     const authForm = document.getElementById('authForm');
+    const authCard = document.querySelector('.auth-card');
     const authTitle = document.getElementById('authTitle');
     const authSubtitle = document.getElementById('authSubtitle');
     const authSubmitButton = document.getElementById('authSubmitButton');
@@ -71,6 +72,12 @@
     function setMessage(message, isError = true) {
       authMessage.textContent = message;
       authMessage.className = isError ? 'auth-message error' : 'auth-message success';
+
+      if (isError && message) {
+        authCard.classList.remove('shake');
+        void authCard.offsetWidth; // restart animation if triggered twice in a row
+        authCard.classList.add('shake');
+      }
     }
 
     function applyMode() {

@@ -47,10 +47,18 @@
     </div>
     
     <div class="buttons-row">
-      <button class="btn-start" id="startButton" onclick="start()">Start</button>
+      <button class="btn-start" id="startButton" onclick="start()">
+        <span class="btn-spinner" id="startSpinner"></span>
+        <span id="startButtonLabel">Start</span>
+      </button>
       <button class="btn-stop" id="stopButton" onclick="stop()">Stop</button>
     </div>
-    
+
+    <div class="recording-status" id="recordingStatus" aria-live="polite">
+      <span class="rec-dot"></span>
+      <span class="rec-label">Recording — you may now speak</span>
+    </div>
+
     <div class="transcription-container">
       <div class="transcription-box" id="transcriptionBox">
       </div>
