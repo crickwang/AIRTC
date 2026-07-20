@@ -21,5 +21,5 @@ jobs:
         script: |
           cd /home/ubuntu/AIRTC
           git pull origin main
-          pip install -r requirements.txt --quiet
-          pm2 restart airtc || pm2 start "python server.py" --name airtc --interpreter python3
+          /home/ubuntu/airtc/bin/pip install -r requirements.txt --quiet
+          pm2 restart airtc || pm2 start /home/ubuntu/run_airtc.sh --name airtc --interpreter none
