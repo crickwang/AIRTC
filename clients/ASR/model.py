@@ -391,7 +391,7 @@ class GoogleASR(ASRClient):
                     msg = "ASR: Speech detected - starting transcription"
                     logger.info(msg)
                     if self.pc:
-                        server_to_client(self.pc.log_channel, msg)
+                        server_to_client(self.pc.log_channel, "Listening to you...")
 
                     # queue that contains pcm data, feed into google STT API
                     # wrapped in AudioStream instance
@@ -561,7 +561,7 @@ class WhisperASR(ASRClient):
                     msg = "ASR: Speech detected - starting transcription"
                     print(msg)
                     if self.pc:
-                        server_to_client(self.pc.log_channel, msg)
+                        server_to_client(self.pc.log_channel, "Listening to you...")
                     # queue that contains pcm data, feed into google STT API
                     # wrapped in AudioStream instance
                     audio_queue = queue.Queue()
@@ -750,7 +750,7 @@ class FunASR(ASRClient):
                     msg = "ASR: Speech detected - starting transcription"
                     print(msg)
                     if self.pc:
-                        server_to_client(self.pc.log_channel, msg)
+                        server_to_client(self.pc.log_channel, "Listening to you...")
 
                     # queue that contains pcm data, feed into google STT API
                     # wrapped in AudioStream instance
@@ -933,7 +933,7 @@ class BaiduASR(ASRClient):
                     msg = "ASR: Speech detected - starting transcription"
                     print(msg)
                     if self.pc:
-                        server_to_client(self.pc.log_channel, msg)
+                        server_to_client(self.pc.log_channel, "Listening to you...")
 
 
                     # from numpy array to pcm data
