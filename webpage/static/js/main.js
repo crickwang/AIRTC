@@ -7,6 +7,21 @@ let audioContext = null;
 let logChannel = null;
 let silentTrack = null;
 let silentAudioSource = null;
+let connectWatchdogId = null;
+let offerAbortController = null;
+
+// Overall budget from clicking Start to reaching connectionState 'connected'. Covers a hung
+// /offer request, a stuck ICE gathering step, or ICE connectivity checks that never succeed -
+// the browser's own 'failed' detection can take ~30s, which is too long to leave someone
+// staring at "Connecting...".
+const CONNECT_TIMEOUT_MS = 15000;
+
+function clearConnectWatchdog() {
+    if (connectWatchdogId) {
+        clearTimeout(connectWatchdogId);
+        connectWatchdogId = null;
+    }
+}
 
 // Build a MediaStreamTrack that continuously emits very low-amplitude noise (not pure
 // silence) instead of relying on the mic track's own `enabled = false`. Disabling a real
@@ -66,6 +81,10 @@ function isScrolledToBottom(box, threshold = 120) {
 function appendToTranscription(text, role) {
     const box = document.getElementById('transcriptionBox');
     if (!box) return;
+
+    // Boxes start hidden until the first transcript actually arrives.
+    document.getElementById('transcriptionContainer')?.classList.remove('hidden');
+    document.getElementById('clearBtnContainer')?.classList.remove('hidden');
 
     // Only auto-follow new messages if the user was already at the bottom —
     // otherwise a live conversation keeps yanking them back down while they read up.
@@ -151,23 +170,22 @@ function ensureAudioContext() {
     return audioContext;
 }
 
-function createPeerConnection(mode = 'local') {
+function createPeerConnection() {
+    // Local mode (empty ICE servers) is currently disabled; always connect online.
     const config = {
-        iceServers: [],  // Empty for local
-        iceCandidatePoolSize: 0
-    };
-
-    if (mode === 'online') {
-        config.iceServers = [
+        iceServers: [
             // { urls: 'stun:stun.qq.com:3478' },
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' }
-        ];
-        config.iceCandidatePoolSize = 10;
-    }
-    
-    pc = new RTCPeerConnection(config);
+        ],
+        iceCandidatePoolSize: 10
+    };
 
+    pc = new RTCPeerConnection(config);
+    // Captured so late/stale events from a connection we've since replaced or torn down
+    // (e.g. a delayed 'closed' event firing after fullStop() already moved on) don't act
+    // on whatever pc happens to be current by the time they arrive.
+    const thisPc = pc;
 
     logChannel = pc.createDataChannel('logs', {
         ordered: true
@@ -206,13 +224,24 @@ function createPeerConnection(mode = 'local') {
     };
 
     pc.onconnectionstatechange = () => {
+        if (pc !== thisPc) return; // stale event from a superseded connection
         console.log("Connection state:", pc.connectionState);
-        if (["disconnected", "failed", "closed"].includes(pc.connectionState)) {
+
+        if (pc.connectionState === "failed") {
+            // Genuine ICE/DTLS failure - neither STUN nor TURN produced a working path.
+            clearConnectWatchdog();
+            setConnecting(false);
+            addLogMessage('Connection failed — check your network and try again', 'error');
+            alert('Connection failed — check your network and try again.');
+            fullStop();
+        } else if (["disconnected", "closed"].includes(pc.connectionState)) {
+            // "closed" is usually our own doing (fullStop() called pc.close()); "disconnected"
+            // can be a transient network blip. Neither needs an alert on top of cleanup.
+            clearConnectWatchdog();
             setConnecting(false);
             fullStop();
-        }
-
-        else if (pc.connectionState === "connected") {
+        } else if (pc.connectionState === "connected") {
+            clearConnectWatchdog();
             setConnecting(false);
             addLogMessage("WebRTC connection established — you may now speak", 'client');
             setRecordingIndicator(true);
@@ -356,9 +385,43 @@ function showPlaybackMessage() {
     }, 10000);
 }
 
+// Full ICE gathering (host + STUN + TURN relay allocation) can take multiple seconds,
+// and we don't need every candidate to connect - host/STUN candidates alone are enough
+// on most networks. Cap the wait so we send whatever we've got after ICE_GATHERING_TIMEOUT_MS
+// rather than blocking the whole handshake on a slow/unreachable TURN allocation.
+const ICE_GATHERING_TIMEOUT_MS = 1500;
+
+function waitForIceGathering(pc, timeoutMs) {
+    if (pc.iceGatheringState === 'complete') {
+        return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+        let settled = false;
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            pc.removeEventListener('icegatheringstatechange', checkState);
+            clearTimeout(timer);
+            resolve();
+        };
+        function checkState() {
+            console.log("ICE gathering state:", pc.iceGatheringState);
+            if (pc.iceGatheringState === 'complete') finish();
+        }
+        pc.addEventListener('icegatheringstatechange', checkState);
+        const timer = setTimeout(() => {
+            console.log(`ICE gathering timed out after ${timeoutMs}ms, proceeding with ${pc.iceGatheringState} candidates`);
+            finish();
+        }, timeoutMs);
+    });
+}
+
 function negotiate() {
     console.log("Starting negotiation...");
-    
+
+    offerAbortController = new AbortController();
+    const signal = offerAbortController.signal;
+
     return pc.createOffer({
         offerToReceiveAudio: true,  // IMPORTANT: This tells the server we want audio back
         offerToReceiveVideo: false
@@ -367,38 +430,29 @@ function negotiate() {
         return pc.setLocalDescription(offer);
     }).then(() => {
         console.log("Set local description, waiting for ICE gathering...");
-        return new Promise((resolve) => {
-            if (pc.iceGatheringState === 'complete') {
-                resolve();
-            } else {
-                pc.addEventListener('icegatheringstatechange', function checkState() {
-                    console.log("ICE gathering state:", pc.iceGatheringState);
-                    if (pc.iceGatheringState === 'complete') {
-                        pc.removeEventListener('icegatheringstatechange', checkState);
-                        resolve();
-                    }
-                });
-            }
-        });
+        return waitForIceGathering(pc, ICE_GATHERING_TIMEOUT_MS);
     }).then(() => {
         const offer = pc.localDescription;
         const processingMode = getProcessingMode();
         console.log("Sending offer to server with processing mode:", processingMode);
-        
+
         return fetch('/offer', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({  
-                sdp: offer.sdp, 
+            body: JSON.stringify({
+                sdp: offer.sdp,
                 type: offer.type,
                 processingMode: processingMode
-            })
+            }),
+            signal
         });
     }).then((res) => {
         if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`);
+            return res.json().catch(() => ({})).then((body) => {
+                throw new Error(body.message || `HTTP error! status: ${res.status}`);
+            });
         }
         return res.json();
     }).then((answer) => {
@@ -407,9 +461,17 @@ function negotiate() {
     }).then(() => {
         console.log("Negotiation complete!");
     }).catch((error) => {
+        if (error.name === 'AbortError') {
+            // We cancelled this ourselves (watchdog timeout or a fresh start()) -
+            // whichever triggered the abort has already shown its own message and cleaned up.
+            console.log("Negotiation aborted");
+            return;
+        }
         console.error("Negotiation failed:", error);
         setConnecting(false);
         addLogMessage('Failed to connect: ' + error.message, 'error');
+        alert(error.message);
+        fullStop();
     });
 }
 
@@ -454,7 +516,22 @@ function start() {
         fullStop();
     }
 
-    pc = createPeerConnection(processingMode);
+    pc = createPeerConnection();
+
+    // Give the whole handshake a hard deadline instead of leaving the user staring at
+    // "Connecting..." until the browser's own (much slower, ~30s) failure detection kicks in.
+    clearConnectWatchdog();
+    const watchdogPc = pc;
+    connectWatchdogId = setTimeout(() => {
+        connectWatchdogId = null;
+        if (pc === watchdogPc && pc.connectionState !== 'connected') {
+            console.warn(`Connection attempt timed out after ${CONNECT_TIMEOUT_MS}ms`);
+            addLogMessage('Connection timed out — check your network and try again', 'error');
+            alert('Connection timed out — check your network and try again.');
+            setConnecting(false);
+            fullStop();
+        }
+    }, CONNECT_TIMEOUT_MS);
 
     // Audio constraints that match your server
     const constraints = {
@@ -497,6 +574,7 @@ function start() {
         })
         .catch((err) => {
             console.error("Failed to access microphone:", err);
+            clearConnectWatchdog();
             alert("Failed to access microphone: " + err.message);
             setConnecting(false);
         });
@@ -505,6 +583,11 @@ function start() {
 // Hard disconnect: close PC and release all tracks
 function fullStop() {
     console.log("Full disconnect...");
+    clearConnectWatchdog();
+    if (offerAbortController) {
+        offerAbortController.abort();
+        offerAbortController = null;
+    }
     if (localStream) {
         localStream.getTracks().forEach(track => {
             track.stop();
@@ -587,7 +670,7 @@ window.getAudioContextInfo = getAudioContextInfo;
 // Function to get the selected processing mode
 function getProcessingMode() {
     const selectedOption = document.querySelector('input[name="processingMode"]:checked');
-    return selectedOption ? selectedOption.value : 'local'; // default to local
+    return selectedOption ? selectedOption.value : 'online'; // default to online; local mode is currently disabled
 }
 
 function clearTranscription() {
@@ -595,6 +678,8 @@ function clearTranscription() {
     if (transcriptionBox && transcriptionBox.innerHTML.trim() !== '') {
         if (confirm('Are you sure you want to clear all transcriptions?')) {
             transcriptionBox.innerHTML = '';
+            document.getElementById('transcriptionContainer')?.classList.add('hidden');
+            document.getElementById('clearBtnContainer')?.classList.add('hidden');
         }
     }
 }

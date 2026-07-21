@@ -60,6 +60,23 @@ body {
     color: #212529 !important;
 }
 
+.nav-login-btn {
+    display: inline-block;
+    background: #0d6efd;
+    color: white !important;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1rem;
+    padding: 0.5rem 1.5rem;
+    border-radius: 18px;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.nav-login-btn:hover {
+    background: #0b5ed7;
+    transform: translateY(-1px);
+}
+
 .main-container {
     max-width: 1200px;
     margin: 0 auto;
@@ -67,7 +84,8 @@ body {
 }
 
 .radio-row {
-    display: flex;
+    /* Hidden: local/online mode selection is disabled, connections always go online. */
+    display: none;
     justify-content: center;
     gap: 4rem;
     margin-bottom: 2rem;
@@ -163,6 +181,10 @@ body {
 
 .btn-stop:hover {
     background-color: #5a6268;
+}
+
+.hidden {
+    display: none;
 }
 
 .transcription-container {

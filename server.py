@@ -20,16 +20,23 @@ from av.audio.resampler import AudioResampler
 
 from audio_player.audio_player import AudioPlayer
 from auth_store import (
+    GUEST_CONVERSATION_LIMIT,
+    GUEST_TOKEN_TTL_SECONDS,
     add_message,
     authenticate_user,
     backup_to_supabase,
     create_conversation,
+    create_guest,
     create_session,
     create_user,
+    decrement_conversation_count,
+    decrement_guest_conversation_count,
     end_conversation,
     get_conversation_usage,
+    get_guest_conversation_count,
     get_session_user,
     increment_conversation_count,
+    increment_guest_conversation_count,
     init_auth_db,
 )
 from config.constants import *
@@ -45,7 +52,7 @@ class TranscriptLoggingQueue(asyncio.Queue):
         self._conversation_id = conversation_id
 
     async def put(self, item):
-        if item:
+        if item and self._conversation_id is not None:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, add_message, self._conversation_id, "user", item)
         await super().put(item)
@@ -67,10 +74,11 @@ class ResponseLoggingQueue(asyncio.Queue):
     async def put(self, item):
         if item is None:
             if self._buffer:
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(
-                    None, add_message, self._conversation_id, "assistant", self._buffer
-                )
+                if self._conversation_id is not None:
+                    loop = asyncio.get_running_loop()
+                    await loop.run_in_executor(
+                        None, add_message, self._conversation_id, "assistant", self._buffer
+                    )
                 self._buffer = ""
         else:
             self._buffer += item
@@ -88,6 +96,7 @@ class WebPage:
         self.logger = logging.getLogger(__name__)
         self.pcs = set()
         self.args = self.generate_args()
+        patch_ice_gather_timeout()
         init_auth_db()
         backup_to_supabase()
         self.logger.info("Logging is set up.")
@@ -103,24 +112,25 @@ class WebPage:
             path="/",
         )
 
+    def _set_guest_cookie(self, response: web.StreamResponse, request: web.Request, token: str):
+        response.set_cookie(
+            "guest_token",
+            token,
+            max_age=GUEST_TOKEN_TTL_SECONDS,
+            httponly=True,
+            samesite="Lax",
+            secure=request.secure,
+            path="/",
+        )
+
     def _get_current_user(self, request: web.Request):
         token = request.cookies.get("session_token")
         return get_session_user(token)
 
-    async def index(self, request: web.Request) -> web.Response:
-        """
-        Serve the index HTML file.
-        Args:
-            request: The HTTP request object.
-        Returns:
-            web.Response: The response containing the HTML content.
-        """
-        content = open(os.path.join(ROOT, "webpage/index.html"), encoding="utf-8").read()
-        return web.Response(content_type="text/html", text=content, charset='utf-8')
-
     async def introduction(self, request: web.Request) -> web.Response:
         """
-        Serve the introduction HTML file.
+        Serve the introduction HTML file. This is now the front page: visitors can read
+        about AIRTC, try it as a guest, or log in via the button in the top-right corner.
         Args:
             request: The HTTP request object.
         Returns:
@@ -129,17 +139,26 @@ class WebPage:
         content = open(os.path.join(ROOT, "webpage/introduction.html"), encoding="utf-8").read()
         return web.Response(content_type="text/html", text=content, charset='utf-8')
 
-    async def generate(self, request: web.Request) -> web.Response:
+    async def login_page(self, request: web.Request) -> web.Response:
         """
-        Serve the generate HTML file.
+        Serve the login/signup HTML file.
         Args:
             request: The HTTP request object.
         Returns:
             web.Response: The response containing the HTML content.
         """
-        if self._get_current_user(request) is None:
-            raise web.HTTPFound("/")
+        content = open(os.path.join(ROOT, "webpage/index.html"), encoding="utf-8").read()
+        return web.Response(content_type="text/html", text=content, charset='utf-8')
 
+    async def generate(self, request: web.Request) -> web.Response:
+        """
+        Serve the generate HTML file. Reachable without logging in — guests get a
+        limited number of trial conversations, enforced in offer().
+        Args:
+            request: The HTTP request object.
+        Returns:
+            web.Response: The response containing the HTML content.
+        """
         content = open(os.path.join(ROOT, "webpage/generate.html"), encoding="utf-8").read()
         return web.Response(content_type="text/html", text=content, charset='utf-8')
 
@@ -197,23 +216,45 @@ class WebPage:
         Manage WebRTC connection.
         """
         user = self._get_current_user(request)
-        if user is None:
-            return web.json_response({"ok": False, "message": "Not authenticated"}, status=401)
+        guest_token = None
 
-        conversation_count, conversation_limit = get_conversation_usage(user["id"])
-        if conversation_count >= conversation_limit:
-            return web.json_response({"ok": False, "message": "Conversation limit reached"}, status=429)
-        increment_conversation_count(user["id"])
-        conversation_id = create_conversation(user["id"])
-
-        params = await request.json()
-        processing_mode = params.get("processingMode", "local")
-        # located in js
-        offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
-        self.logger.info(f"Received offer with processing mode: {processing_mode}")
-        if processing_mode == "local":
-            pc = RTCPeerConnection()
+        if user is not None:
+            conversation_count, conversation_limit = get_conversation_usage(user["id"])
+            if conversation_count >= conversation_limit:
+                return web.json_response({"ok": False, "message": "Conversation limit reached"}, status=429)
+            increment_conversation_count(user["id"])
+            conversation_id = create_conversation(user["id"])
         else:
+            # No account: track trial usage against an opaque guest cookie instead of a user row.
+            guest_token = request.cookies.get("guest_token")
+            guest_count = get_guest_conversation_count(guest_token)
+            if guest_count is None:
+                guest_token = create_guest()
+                guest_count = 0
+            if guest_count >= GUEST_CONVERSATION_LIMIT:
+                response = web.json_response(
+                    {"ok": False, "message": "Guest trial used up — sign up for more conversations."},
+                    status=429,
+                )
+                self._set_guest_cookie(response, request, guest_token)
+                return response
+            increment_guest_conversation_count(guest_token)
+            # Guest conversations aren't persisted (no account to attach them to).
+            conversation_id = None
+
+        # Everything from here on can fail midway through negotiation (bad SDP, a slow/dead
+        # STUN or TURN server, a client pipeline error, etc). If it does, we clean up whatever
+        # got created, refund the conversation slot charged above (a failed connection
+        # shouldn't cost the user part of their limited quota), and return a clean error
+        # instead of a raw 500 crash page or a hung request.
+        pc = None
+        try:
+            params = await request.json()
+            processing_mode = params.get("processingMode", "online")
+            # located in js
+            offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+            self.logger.info(f"Received offer with processing mode: {processing_mode}")
+            # Local mode (no STUN/TURN) is currently disabled; always connect online.
             pc = RTCPeerConnection(configuration=RTCConfiguration(
                     iceServers=[
                         RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
@@ -232,188 +273,209 @@ class WebPage:
                     ]
                 )
             )
-        pc_id = f"PC-{uuid.uuid4().hex[:8]}"
-        self.pcs.add(pc)
-        log_channel = pc.createDataChannel("log")
-        pc.log_channel = log_channel
-        self.logger.info(f"Current {pc_id}: New connection established")
+            pc_id = f"PC-{uuid.uuid4().hex[:8]}"
+            self.pcs.add(pc)
+            log_channel = pc.createDataChannel("log")
+            pc.log_channel = log_channel
+            self.logger.info(f"Current {pc_id}: New connection established")
 
-        # Create session-specific queues
-        # asr_queue: transfer results of ASR to LLM
-        # llm_queue: transfer results of LLM to TTS
-        # audio_queue: transfer audio data from TTS to WebRTC browser player
-        asr_queue = TranscriptLoggingQueue(conversation_id, maxsize=20)
-        llm_queue = ResponseLoggingQueue(conversation_id, maxsize=20)
-        audio_queue = asyncio.Queue(maxsize=100)
+            # Create session-specific queues
+            # asr_queue: transfer results of ASR to LLM
+            # llm_queue: transfer results of LLM to TTS
+            # audio_queue: transfer audio data from TTS to WebRTC browser player
+            asr_queue = TranscriptLoggingQueue(conversation_id, maxsize=20)
+            llm_queue = ResponseLoggingQueue(conversation_id, maxsize=20)
+            audio_queue = asyncio.Queue(maxsize=100)
 
-        # Create components
-        stop_event = asyncio.Event()
-        interrupt_event = asyncio.Event()
-        recorder = MediaBlackhole()
-        audio_player = AudioPlayer(
-            audio_queue,
-            sample_rate=AUDIO_SAMPLE_RATE,
-            samples_per_frame=SAMPLES_PER_FRAME,
-            format=FORMAT,
-            layout=LAYOUT,
-        )
-        pc._audio_player = audio_player
-        vad = create_client("vad",
-                            self.args.vad,
-                            threshold=VAD_THRESHOLD,
+            # Create components
+            stop_event = asyncio.Event()
+            interrupt_event = asyncio.Event()
+            recorder = MediaBlackhole()
+            audio_player = AudioPlayer(
+                audio_queue,
+                sample_rate=AUDIO_SAMPLE_RATE,
+                samples_per_frame=SAMPLES_PER_FRAME,
+                format=FORMAT,
+                layout=LAYOUT,
+            )
+            pc._audio_player = audio_player
+            vad = create_client("vad",
+                                self.args.vad,
+                                threshold=VAD_THRESHOLD,
+                                )
+            # some ASR may require different sample rate!
+            resampler = AudioResampler(rate=ASR_SAMPLE_RATE,
+                                       layout=LAYOUT,
+                                       format=FORMAT,
+                                      )
+            # Each ASR platform uses its own language code format:
+            #   google  → BCP-47 tag  e.g. "zh-CN", "en-US"  (set asr_language in config.yaml)
+            #   whisper → ISO-639-1   e.g. "zh", "en", or None for auto-detect
+            #             (set whisper_language in config.yaml; ~ / null = auto-detect)
+            asr_language_map = {
+                "whisper": WHISPER_LANGUAGE_CODES,  # None triggers Whisper's built-in auto-detect
+            }
+            asr_language = asr_language_map.get(self.args.asr, ASR_LANGUAGE)
+            asr_client = create_client("asr",
+                                       platform=self.args.asr,
+                                       rate=ASR_SAMPLE_RATE,
+                                       language_code=asr_language,
+                                       alternative_language_codes=ASR_ALTERNATIVE_LANGUAGES,
+                                       chunk_size=ASR_CHUNK_SIZE,
+                                       stop_word=STOP_WORD,
+                                       pc=pc,
+                                       )
+            llm_credentials = {
+                "google": dict(model=GOOGLE_LLM_MODEL, api_key=GOOGLE_AI_API_KEY, base_url=GOOGLE_LLM_BASE_URL),
+                "baidu":  dict(model=LLM_MODEL, api_key=LLM_API_KEY, base_url=LLM_BASE_URL),
+            }
+            llm_cfg = llm_credentials.get(self.args.llm, llm_credentials["baidu"])
+            llm_client = create_client("llm",
+                                        platform=self.args.llm,
+                                        pc=pc,
+                                        **llm_cfg,
+                                        )
+            tts_client = create_client("tts",
+                                        platform=self.args.tts,
+                                        voice=AZURE_TTS_VOICE,
+                                        key=AZURE_TTS_KEY,
+                                        region=AZURE_TTS_REGION,
+                                        pc=pc,
+                                        )
+
+            pc.addTrack(audio_player)
+
+            @pc.on("datachannel")
+            def on_datachannel(channel):
+                @channel.on("message")
+                def on_message(message):
+                    try:
+                        data = json.loads(message)
+                        if data.get("type") == "clear_audio" and hasattr(pc, '_audio_player'):
+                            pc._audio_player.request_interrupt()
+                            self.logger.info(f"{pc_id}: Audio buffer cleared by client request")
+                    except Exception:
+                        pass
+
+            @pc.on("connectionstatechange")
+            async def on_connectionstatechange():
+                self.logger.info(f"Current {pc_id}: Connection state: {pc.connectionState}")
+                if pc.connectionState == 'connected':
+                    msg = '\n' + '=' * 50 + '\nStart Recording\n' + '=' * 50
+                    self.logger.info(msg)
+                    server_to_client(pc.log_channel, msg)
+                if pc.connectionState in ['closed', 'failed', 'disconnected']:
+                    # Cancel all tasks
+                    if hasattr(pc, '_stop_event'):
+                        pc._stop_event.set()
+
+                    tasks = []
+                    for attr in ['_asr_task', '_llm_task', '_tts_task']:
+                        if hasattr(pc, attr):
+                            task = getattr(pc, attr)
+                            if not task.done():
+                                task.cancel()
+                                tasks.append(task)
+
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
+
+                    await pc.close()
+                    self.pcs.discard(pc)
+                    if conversation_id is not None:
+                        loop = asyncio.get_running_loop()
+                        await loop.run_in_executor(None, end_conversation, conversation_id)
+                    self.logger.info(f"{pc_id}: Connection cleaned up")
+
+            @pc.on("track")
+            async def on_track(track):
+                self.logger.info(f"Current {pc_id}: Received {track.kind} track")
+                if track.kind == "audio":
+                    recorder.addTrack(track)
+                    # Create control events to stop or interrupt connection
+                    pc._stop_event = stop_event
+                    pc._interrupt_event = interrupt_event
+                    try:
+                        pc._asr_task = asyncio.create_task(
+                            asr_client.generate(
+                                track,
+                                asr_queue,
+                                audio_player,
+                                stop_event,
+                                interrupt_event,
+                                vad=vad,
+                                resampler=resampler,
+                                timeout=TIMEOUT,
                             )
-        # some ASR may require different sample rate!
-        resampler = AudioResampler(rate=ASR_SAMPLE_RATE,
-                                   layout=LAYOUT,
-                                   format=FORMAT,
-                                  )
-        # Each ASR platform uses its own language code format:
-        #   google  → BCP-47 tag  e.g. "zh-CN", "en-US"  (set asr_language in config.yaml)
-        #   whisper → ISO-639-1   e.g. "zh", "en", or None for auto-detect
-        #             (set whisper_language in config.yaml; ~ / null = auto-detect)
-        asr_language_map = {
-            "whisper": WHISPER_LANGUAGE_CODES,  # None triggers Whisper's built-in auto-detect
-        }
-        asr_language = asr_language_map.get(self.args.asr, ASR_LANGUAGE)
-        asr_client = create_client("asr",
-                                   platform=self.args.asr,
-                                   rate=ASR_SAMPLE_RATE,
-                                   language_code=asr_language,
-                                   alternative_language_codes=ASR_ALTERNATIVE_LANGUAGES,
-                                   chunk_size=ASR_CHUNK_SIZE,
-                                   stop_word=STOP_WORD,
-                                   pc=pc,
-                                   )
-        llm_credentials = {
-            "google": dict(model=GOOGLE_LLM_MODEL, api_key=GOOGLE_AI_API_KEY, base_url=GOOGLE_LLM_BASE_URL),
-            "baidu":  dict(model=LLM_MODEL, api_key=LLM_API_KEY, base_url=LLM_BASE_URL),
-        }
-        llm_cfg = llm_credentials.get(self.args.llm, llm_credentials["baidu"])
-        llm_client = create_client("llm",
-                                    platform=self.args.llm,
-                                    pc=pc,
-                                    **llm_cfg,
-                                    )
-        tts_client = create_client("tts",
-                                    platform=self.args.tts,
-                                    voice=AZURE_TTS_VOICE,
-                                    key=AZURE_TTS_KEY,
-                                    region=AZURE_TTS_REGION,
-                                    pc=pc,
-                                    )
+                        )
 
-        pc.addTrack(audio_player)
+                        pc._llm_task = asyncio.create_task(
+                            llm_client.generate(
+                                asr_queue,
+                                llm_queue,
+                                stop_event,
+                                interrupt_event,
+                                system=SYSTEM_PROMPT,
+                                max_tokens=MAX_TOKENS,
+                                timeout=TIMEOUT,
+                            )
+                        )
 
-        @pc.on("datachannel")
-        def on_datachannel(channel):
-            @channel.on("message")
-            def on_message(message):
-                try:
-                    data = json.loads(message)
-                    if data.get("type") == "clear_audio" and hasattr(pc, '_audio_player'):
-                        pc._audio_player.request_interrupt()
-                        self.logger.info(f"{pc_id}: Audio buffer cleared by client request")
-                except Exception:
-                    pass
+                        pc._tts_task = asyncio.create_task(
+                            tts_client.generate(
+                                llm_queue,
+                                audio_queue,
+                                stop_event,
+                                interrupt_event,
+                                samples_per_frame=SAMPLES_PER_FRAME,
+                                timeout=TIMEOUT,
+                            )
+                        )
 
-        @pc.on("connectionstatechange")
-        async def on_connectionstatechange():
-            self.logger.info(f"Current {pc_id}: Connection state: {pc.connectionState}")
-            if pc.connectionState == 'connected':
-                msg = '\n' + '=' * 50 + '\nStart Recording\n' + '=' * 50
-                self.logger.info(msg)
-                server_to_client(pc.log_channel, msg)
-            if pc.connectionState in ['closed', 'failed', 'disconnected']:
-                # Cancel all tasks
-                if hasattr(pc, '_stop_event'):
-                    pc._stop_event.set()
+                    except Exception as e:
+                        self.logger.error(f"Current {pc_id}: Pipeline error: {e}")
+                        traceback.print_exc()
 
-                tasks = []
-                for attr in ['_asr_task', '_llm_task', '_tts_task']:
-                    if hasattr(pc, attr):
-                        task = getattr(pc, attr)
-                        if not task.done():
-                            task.cancel()
-                            tasks.append(task)
+                @track.on("ended")
+                async def on_ended():
+                    msg = f"Current {pc_id}: Track ended"
+                    self.logger.info(msg)
+                    server_to_client(pc.log_channel, msg)
+                    if hasattr(pc, "_stop_event"):
+                        pc._stop_event.set()
+                    await recorder.stop()
 
-                if tasks:
-                    await asyncio.gather(*tasks, return_exceptions=True)
+            # Complete WebRTC setup
+            await pc.setRemoteDescription(offer)
+            await recorder.start()
 
-                await pc.close()
+            answer = await pc.createAnswer()
+            await pc.setLocalDescription(answer)
+
+            response = web.Response(
+                content_type="application/json",
+                text=json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
+            )
+        except Exception:
+            self.logger.error(f"Failed to establish WebRTC connection: {traceback.format_exc()}")
+            if pc is not None:
                 self.pcs.discard(pc)
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(None, end_conversation, conversation_id)
-                self.logger.info(f"{pc_id}: Connection cleaned up")
+                await pc.close()
+            if user is not None:
+                decrement_conversation_count(user["id"])
+            else:
+                decrement_guest_conversation_count(guest_token)
+            response = web.json_response(
+                {"ok": False, "message": "Failed to establish connection — please try again."},
+                status=500,
+            )
+            if guest_token is not None:
+                self._set_guest_cookie(response, request, guest_token)
+            return response
 
-        @pc.on("track")
-        async def on_track(track):
-            self.logger.info(f"Current {pc_id}: Received {track.kind} track")
-            if track.kind == "audio":
-                recorder.addTrack(track)
-                # Create control events to stop or interrupt connection
-                pc._stop_event = stop_event
-                pc._interrupt_event = interrupt_event
-                try:
-                    pc._asr_task = asyncio.create_task(
-                        asr_client.generate(
-                            track,
-                            asr_queue,
-                            audio_player,
-                            stop_event,
-                            interrupt_event,
-                            vad=vad,
-                            resampler=resampler,
-                            timeout=TIMEOUT,
-                        )
-                    )
-
-                    pc._llm_task = asyncio.create_task(
-                        llm_client.generate(
-                            asr_queue,
-                            llm_queue,
-                            stop_event,
-                            interrupt_event,
-                            system=SYSTEM_PROMPT,
-                            max_tokens=MAX_TOKENS,
-                            timeout=TIMEOUT,
-                        )
-                    )
-
-                    pc._tts_task = asyncio.create_task(
-                        tts_client.generate(
-                            llm_queue,
-                            audio_queue,
-                            stop_event,
-                            interrupt_event,
-                            samples_per_frame=SAMPLES_PER_FRAME,
-                            timeout=TIMEOUT,
-                        )
-                    )
-
-                except Exception as e:
-                    self.logger.error(f"Current {pc_id}: Pipeline error: {e}")
-                    traceback.print_exc()
-
-            @track.on("ended")
-            async def on_ended():
-                msg = f"Current {pc_id}: Track ended"
-                self.logger.info(msg)
-                server_to_client(pc.log_channel, msg)
-                if hasattr(pc, "_stop_event"):
-                    pc._stop_event.set()
-                await recorder.stop()
-
-        # Complete WebRTC setup
-        await pc.setRemoteDescription(offer)
-        await recorder.start()
-
-        answer = await pc.createAnswer()
-        await pc.setLocalDescription(answer)
-
-        return web.Response(
-            content_type="application/json",
-            text=json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
-        )
+        if guest_token is not None:
+            self._set_guest_cookie(response, request, guest_token)
+        return response
 
     async def on_shutdown(self, app: web.Application) -> None:
         """
@@ -434,8 +496,9 @@ class WebPage:
         app = web.Application()
         app.on_shutdown.append(self.on_shutdown)
         print(os.path.join(ROOT, "webpage"))
-        app.router.add_get("/", self.index)
+        app.router.add_get("/", self.introduction)
         app.router.add_get("/introduction.html", self.introduction)
+        app.router.add_get("/index.html", self.login_page)
         app.router.add_get("/generate.html", self.generate)
         app.router.add_post("/offer", self.offer)
         app.router.add_post("/check-password", self.check_password)
