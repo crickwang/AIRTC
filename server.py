@@ -305,7 +305,7 @@ class WebPage:
                     if msg_type == "clear_audio" and hasattr(pc, '_audio_player'):
                         pc._audio_player.request_interrupt()
                         self.logger.info(f"{pc_id}: Audio buffer cleared by client request")
-                    elif msg_type == "activate":
+                    elif msg_type == "activate": 
                         asyncio.create_task(self._activate_session(pc, pc_id))
 
             @pc.on("connectionstatechange")
