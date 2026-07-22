@@ -14,6 +14,8 @@ DB_PATH = Path(ROOT) / ("auth.db" if APP_ENV == "production" else "auth.dev.db")
 PBKDF2_ITERATIONS = 200_000
 SESSION_TTL_SECONDS = 3600
 DEFAULT_CONVERSATION_LIMIT = 30
+GUEST_CONVERSATION_LIMIT = 3
+GUEST_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +79,17 @@ def init_auth_db():
                 created_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        # guests table tracks the trial usage of visitors who haven't signed up,
+        # identified by an opaque cookie token rather than a real account
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS guests (
+                token TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                conversation_count INTEGER NOT NULL DEFAULT 0
             )
             """
         )
@@ -213,6 +226,46 @@ def get_session_user(token: str):
         return session
 
 
+def create_guest() -> str:
+    token = secrets.token_urlsafe(32)
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO guests (token, created_at) VALUES (?, datetime('now'))",
+            (token,),
+        )
+    return token
+
+
+def get_guest_conversation_count(token: str) -> int | None:
+    """Returns the guest's usage count, or None if the token is unknown (never issued)."""
+    if not token:
+        return None
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT conversation_count FROM guests WHERE token = ?",
+            (token,),
+        ).fetchone()
+    return row["conversation_count"] if row else None
+
+
+def increment_guest_conversation_count(token: str):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE guests SET conversation_count = conversation_count + 1 WHERE token = ?",
+            (token,),
+        )
+
+
+def decrement_guest_conversation_count(token: str):
+    """Refunds a trial slot when the connection never actually got established."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE guests SET conversation_count = conversation_count - 1 "
+            "WHERE token = ? AND conversation_count > 0",
+            (token,),
+        )
+
+
 def get_conversation_usage(user_id: int) -> tuple[int, int]:
     with _connect() as conn:
         row = conn.execute(
@@ -226,6 +279,16 @@ def increment_conversation_count(user_id: int):
     with _connect() as conn:
         conn.execute(
             "UPDATE users SET conversation_count = conversation_count + 1 WHERE id = ?",
+            (user_id,),
+        )
+
+
+def decrement_conversation_count(user_id: int):
+    """Refunds a conversation slot when the connection never actually got established."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET conversation_count = conversation_count - 1 "
+            "WHERE id = ? AND conversation_count > 0",
             (user_id,),
         )
 

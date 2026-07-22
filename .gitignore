@@ -25,11 +25,13 @@ work_logs/
 model/
 references/
 
-# AI services
-asr/
-llm/
-tts/
-seamless/
+# AI services (top-level scratch/model-cache dirs only — anchored so this
+# doesn't also match clients/ASR/, clients/LLM/, clients/TTS/ at any depth,
+# which it did unanchored, worse on Windows due to case-insensitive matching)
+/asr/
+/llm/
+/tts/
+/seamless/
 
 # Temp files
 temp.py

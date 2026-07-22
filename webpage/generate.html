@@ -16,8 +16,8 @@
   
   <nav class="navbar">
     <div class="container-fluid">
-      <a class="navbar-brand" href="#">AIRTC</a>
-      <ul class="navbar-nav flex-row ms-auto">
+      <a class="navbar-brand" href="/">AIRTC</a>
+      <ul class="navbar-nav flex-row ms-auto align-items-center">
         <li class="nav-item">
           <a class="nav-link" href="introduction.html">Introduction</a>
         </li>
@@ -25,7 +25,10 @@
           <a class="nav-link" href="https://github.com/crickwang/AIRTC" target="_blank">GitHub</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="https://crickwang.github.io/website/" target="_blank">Portfolio</a>
+          <a class="nav-link" href="https://crickwang.github.io/website/" target="_blank">Contact</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-login-btn" href="index.html">Login</a>
         </li>
       </ul>
     </div>
@@ -47,16 +50,24 @@
     </div>
     
     <div class="buttons-row">
-      <button class="btn-start" id="startButton" onclick="start()">Start</button>
+      <button class="btn-start" id="startButton" onclick="start()">
+        <span class="btn-spinner" id="startSpinner"></span>
+        <span id="startButtonLabel">Start</span>
+      </button>
       <button class="btn-stop" id="stopButton" onclick="stop()">Stop</button>
     </div>
-    
-    <div class="transcription-container">
+
+    <div class="recording-status" id="recordingStatus" aria-live="polite">
+      <span class="rec-dot"></span>
+      <span class="rec-label">Recording — you may now speak</span>
+    </div>
+
+    <div class="transcription-container hidden" id="transcriptionContainer">
       <div class="transcription-box" id="transcriptionBox">
       </div>
     </div>
-    
-    <div class="clear-btn-container">
+
+    <div class="clear-btn-container hidden" id="clearBtnContainer">
       <button class="btn-clear" onclick="clearTranscription()">Clear Transcription</button>
     </div>
     

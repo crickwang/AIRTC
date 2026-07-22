@@ -227,7 +227,7 @@ body {
   75% { transform: translateX(10px); }
 }
 
-.input-wrapper.error {
+.auth-card.shake {
   animation: shake 0.3s ease-in-out;
 }
 

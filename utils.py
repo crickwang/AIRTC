@@ -3,6 +3,8 @@ import json
 import os
 import ssl
 
+import aioice.ice
+import aiortc.rtcicetransport
 import requests
 from aiortc import RTCDataChannel
 from dotenv import load_dotenv
@@ -23,6 +25,29 @@ def get_ssl_context(args):
         ssl_context.load_cert_chain(args.cert_file, args.key_file)
         return ssl_context
     return None
+
+# aioice.Connection.get_component_candidates() gathers STUN/TURN candidates with a
+# hardcoded 5s timeout that aiortc doesn't expose through RTCConfiguration. That's the
+# server-side mirror of the client's ICE-gathering wait, and the likely source of most of
+# the server-side connect latency when a TURN relay is slow or unreachable. Subclassing
+# and swapping the reference aiortc holds is more brittle than we'd like (it's reaching
+# into a third-party internal), but it's the only hook available; if aioice's method
+# signature changes incompatibly, this raises loudly (TypeError) rather than silently
+# misbehaving, since the override calls super() with the same keyword.
+ICE_GATHER_TIMEOUT_SECONDS = 2
+
+
+class _FastGatherConnection(aioice.ice.Connection):
+    async def get_component_candidates(self, component, addresses, timeout=ICE_GATHER_TIMEOUT_SECONDS):
+        return await super().get_component_candidates(component, addresses, timeout=timeout)
+
+
+def patch_ice_gather_timeout():
+    """Shrink aioice's per-component STUN/TURN gather timeout (default 5s) to
+    ICE_GATHER_TIMEOUT_SECONDS. Whatever candidates aren't ready by then are simply
+    left out (graceful degradation to host/STUN-only) rather than blocking the whole
+    WebRTC handshake on a slow or unreachable TURN allocation."""
+    aiortc.rtcicetransport.Connection = _FastGatherConnection
 
 def create_client(model_type, platform, **kwargs):
     """
