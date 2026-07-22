@@ -15,7 +15,7 @@ from aiortc import (
     RTCPeerConnection,
     RTCSessionDescription,
 )
-from aiortc.contrib.media import MediaBlackhole
+from aiortc.mediastreams import MediaStreamError
 from av.audio.resampler import AudioResampler
 
 from audio_player.audio_player import AudioPlayer
@@ -42,6 +42,11 @@ from auth_store import (
 from config.constants import *
 from config.logging_config import setup_logging
 from utils import *
+
+# How long a pre-connected ("warm") peer connection may sit without the client
+# sending "activate" before the server closes it. Warm connections are opened on
+# page load, so every visitor — including bots — holds one; this bounds that cost.
+WARM_IDLE_TIMEOUT_S = 300
 
 
 class TranscriptLoggingQueue(asyncio.Queue):
@@ -213,40 +218,25 @@ class WebPage:
 
     async def offer(self, request: web.Request) -> web.Response:
         """
-        Manage WebRTC connection.
+        Warm-connect: negotiate the WebRTC transport only.
+
+        Called on page load, before the user clicks Start, so the slow part of the
+        handshake (ICE/DTLS) is already done by the time they want to talk. Nothing
+        here charges quota or constructs ASR/LLM/TTS clients — all of that happens
+        when the client sends an "activate" message over the data channel (see
+        _activate_session), so a page view alone costs neither a conversation slot
+        nor any external API session.
         """
         user = self._get_current_user(request)
         guest_token = None
-
-        if user is not None:
-            conversation_count, conversation_limit = get_conversation_usage(user["id"])
-            if conversation_count >= conversation_limit:
-                return web.json_response({"ok": False, "message": "Conversation limit reached"}, status=429)
-            increment_conversation_count(user["id"])
-            conversation_id = create_conversation(user["id"])
-        else:
-            # No account: track trial usage against an opaque guest cookie instead of a user row.
+        if user is None:
+            # Resolve (or mint) the guest identity now, while we still have HTTP
+            # cookies in hand — the later "activate" arrives over the data channel,
+            # which can't set cookies. No usage is charged here.
             guest_token = request.cookies.get("guest_token")
-            guest_count = get_guest_conversation_count(guest_token)
-            if guest_count is None:
+            if get_guest_conversation_count(guest_token) is None:
                 guest_token = create_guest()
-                guest_count = 0
-            if guest_count >= GUEST_CONVERSATION_LIMIT:
-                response = web.json_response(
-                    {"ok": False, "message": "Guest trial used up — sign up for more conversations."},
-                    status=429,
-                )
-                self._set_guest_cookie(response, request, guest_token)
-                return response
-            increment_guest_conversation_count(guest_token)
-            # Guest conversations aren't persisted (no account to attach them to).
-            conversation_id = None
 
-        # Everything from here on can fail midway through negotiation (bad SDP, a slow/dead
-        # STUN or TURN server, a client pipeline error, etc). If it does, we clean up whatever
-        # got created, refund the conversation slot charged above (a failed connection
-        # shouldn't cost the user part of their limited quota), and return a clean error
-        # instead of a raw 500 crash page or a hung request.
         pc = None
         try:
             params = await request.json()
@@ -277,20 +267,21 @@ class WebPage:
             self.pcs.add(pc)
             log_channel = pc.createDataChannel("log")
             pc.log_channel = log_channel
-            self.logger.info(f"Current {pc_id}: New connection established")
+            self.logger.info(f"Current {pc_id}: New warm connection")
 
-            # Create session-specific queues
-            # asr_queue: transfer results of ASR to LLM
-            # llm_queue: transfer results of LLM to TTS
-            # audio_queue: transfer audio data from TTS to WebRTC browser player
-            asr_queue = TranscriptLoggingQueue(conversation_id, maxsize=20)
-            llm_queue = ResponseLoggingQueue(conversation_id, maxsize=20)
+            # Identity and session state stashed for activation time.
+            pc._user = user
+            pc._guest_token = guest_token
+            pc._activated = False
+            pc._conversation_id = None
+            pc._client_track = None
+            pc._stop_event = asyncio.Event()
+            pc._interrupt_event = asyncio.Event()
+
+            # The return-audio track must be in the SDP answer, so the player is
+            # attached at warm time — a local object that costs nothing until TTS
+            # actually feeds its queue.
             audio_queue = asyncio.Queue(maxsize=100)
-
-            # Create components
-            stop_event = asyncio.Event()
-            interrupt_event = asyncio.Event()
-            recorder = MediaBlackhole()
             audio_player = AudioPlayer(
                 audio_queue,
                 sample_rate=AUDIO_SAMPLE_RATE,
@@ -299,6 +290,192 @@ class WebPage:
                 layout=LAYOUT,
             )
             pc._audio_player = audio_player
+            pc._audio_queue = audio_queue
+            pc.addTrack(audio_player)
+
+            @pc.on("datachannel")
+            def on_datachannel(channel):
+                @channel.on("message")
+                def on_message(message):
+                    try:
+                        data = json.loads(message)
+                    except Exception:
+                        return
+                    msg_type = data.get("type")
+                    if msg_type == "clear_audio" and hasattr(pc, '_audio_player'):
+                        pc._audio_player.request_interrupt()
+                        self.logger.info(f"{pc_id}: Audio buffer cleared by client request")
+                    elif msg_type == "activate":
+                        asyncio.create_task(self._activate_session(pc, pc_id))
+
+            @pc.on("connectionstatechange")
+            async def on_connectionstatechange():
+                self.logger.info(f"Current {pc_id}: Connection state: {pc.connectionState}")
+                if pc.connectionState in ['closed', 'failed', 'disconnected']:
+                    pc._stop_event.set()
+
+                    for attr in ['_idle_task', '_drain_task']:
+                        task = getattr(pc, attr, None)
+                        if task is not None and not task.done():
+                            task.cancel()
+
+                    tasks = []
+                    for attr in ['_asr_task', '_llm_task', '_tts_task']:
+                        if hasattr(pc, attr):
+                            task = getattr(pc, attr)
+                            if not task.done():
+                                task.cancel()
+                                tasks.append(task)
+
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
+
+                    await pc.close()
+                    self.pcs.discard(pc)
+                    if pc._conversation_id is not None:
+                        loop = asyncio.get_running_loop()
+                        await loop.run_in_executor(None, end_conversation, pc._conversation_id)
+                    self.logger.info(f"{pc_id}: Connection cleaned up")
+
+            @pc.on("track")
+            async def on_track(track):
+                self.logger.info(f"Current {pc_id}: Received {track.kind} track")
+                if track.kind == "audio":
+                    pc._client_track = track
+                    # Nothing consumes the track until activation; drain it so
+                    # aiortc's per-track frame queue doesn't grow without bound.
+                    pc._drain_task = asyncio.create_task(self._drain_track(track))
+
+                @track.on("ended")
+                async def on_ended():
+                    msg = f"Current {pc_id}: Track ended"
+                    self.logger.info(msg)
+                    server_to_client(pc.log_channel, msg)
+                    pc._stop_event.set()
+
+            # Complete WebRTC setup
+            await pc.setRemoteDescription(offer)
+
+            answer = await pc.createAnswer()
+            await pc.setLocalDescription(answer)
+
+            pc._idle_task = asyncio.create_task(self._close_if_never_activated(pc, pc_id))
+
+            response = web.Response(
+                content_type="application/json",
+                text=json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
+            )
+        except Exception:
+            self.logger.error(f"Failed to establish WebRTC connection: {traceback.format_exc()}")
+            if pc is not None:
+                self.pcs.discard(pc)
+                await pc.close()
+            response = web.json_response(
+                {"ok": False, "message": "Failed to establish connection — please try again."},
+                status=500,
+            )
+            if guest_token is not None:
+                self._set_guest_cookie(response, request, guest_token)
+            return response
+
+        if guest_token is not None:
+            self._set_guest_cookie(response, request, guest_token)
+        return response
+
+    async def _drain_track(self, track):
+        """Consume and discard frames from a track nobody is using yet."""
+        try:
+            while True:
+                await track.recv()
+        except (MediaStreamError, asyncio.CancelledError):
+            pass
+
+    async def _close_if_never_activated(self, pc, pc_id):
+        """Reap warm connections whose page view never turned into a session."""
+        try:
+            await asyncio.sleep(WARM_IDLE_TIMEOUT_S)
+        except asyncio.CancelledError:
+            return
+        if not pc._activated and pc.connectionState not in ("closed", "failed"):
+            self.logger.info(
+                f"{pc_id}: Warm connection idle for {WARM_IDLE_TIMEOUT_S}s without activation, closing"
+            )
+            # Detach ourselves first so the close-triggered cleanup handler doesn't
+            # cancel this task in the middle of its own pc.close() call.
+            pc._idle_task = None
+            await pc.close()
+            self.pcs.discard(pc)
+
+    async def _activate_session(self, pc, pc_id):
+        """
+        Handle the client's "activate" data-channel message: charge quota, build the
+        ASR/LLM/TTS pipeline, and start it on the already-negotiated connection.
+
+        This is the second half of what offer() used to do in one shot. It only runs
+        when the user actually clicks Start, so external API clients are never
+        constructed for a visitor who merely loads the page.
+        """
+        def reply(ok, message=""):
+            try:
+                pc.log_channel.send(json.dumps({"type": "activate_result", "ok": ok, "message": message}))
+            except Exception:
+                self.logger.warning(f"{pc_id}: Could not deliver activate_result")
+
+        if pc._activated:
+            reply(True)
+            return
+        if pc._client_track is None:
+            reply(False, "No audio track on this connection — please reload the page.")
+            return
+
+        user = pc._user
+        guest_token = pc._guest_token
+        conversation_id = None
+        charged = False
+        try:
+            # Quota is checked and charged here, not at negotiation time, so page
+            # views (and failed handshakes) never cost a conversation slot.
+            if user is not None:
+                conversation_count, conversation_limit = get_conversation_usage(user["id"])
+                if conversation_count >= conversation_limit:
+                    reply(False, "Conversation limit reached")
+                    return
+                increment_conversation_count(user["id"])
+                charged = True
+                conversation_id = create_conversation(user["id"])
+            else:
+                guest_count = get_guest_conversation_count(guest_token)
+                if guest_count is None or guest_count >= GUEST_CONVERSATION_LIMIT:
+                    reply(False, "Guest trial used up — sign up for more conversations.")
+                    return
+                increment_guest_conversation_count(guest_token)
+                charged = True
+                # Guest conversations aren't persisted (no account to attach them to).
+
+            pc._activated = True
+            pc._conversation_id = conversation_id
+
+            for attr in ('_idle_task', '_drain_task'):
+                task = getattr(pc, attr, None)
+                if task is not None and not task.done():
+                    task.cancel()
+            # Make sure the drain task has released track.recv() before ASR takes over.
+            drain_task = getattr(pc, '_drain_task', None)
+            if drain_task is not None:
+                await asyncio.gather(drain_task, return_exceptions=True)
+                pc._drain_task = None
+
+            # Create session-specific queues
+            # asr_queue: transfer results of ASR to LLM
+            # llm_queue: transfer results of LLM to TTS
+            # audio_queue (from warm-connect): transfer audio from TTS to browser player
+            asr_queue = TranscriptLoggingQueue(conversation_id, maxsize=20)
+            llm_queue = ResponseLoggingQueue(conversation_id, maxsize=20)
+            audio_queue = pc._audio_queue
+            audio_player = pc._audio_player
+            stop_event = pc._stop_event
+            interrupt_event = pc._interrupt_event
+
             vad = create_client("vad",
                                 self.args.vad,
                                 threshold=VAD_THRESHOLD,
@@ -343,139 +520,63 @@ class WebPage:
                                         pc=pc,
                                         )
 
-            pc.addTrack(audio_player)
-
-            @pc.on("datachannel")
-            def on_datachannel(channel):
-                @channel.on("message")
-                def on_message(message):
-                    try:
-                        data = json.loads(message)
-                        if data.get("type") == "clear_audio" and hasattr(pc, '_audio_player'):
-                            pc._audio_player.request_interrupt()
-                            self.logger.info(f"{pc_id}: Audio buffer cleared by client request")
-                    except Exception:
-                        pass
-
-            @pc.on("connectionstatechange")
-            async def on_connectionstatechange():
-                self.logger.info(f"Current {pc_id}: Connection state: {pc.connectionState}")
-                if pc.connectionState == 'connected':
-                    msg = '\n' + '=' * 50 + '\nStart Recording\n' + '=' * 50
-                    self.logger.info(msg)
-                    server_to_client(pc.log_channel, msg)
-                if pc.connectionState in ['closed', 'failed', 'disconnected']:
-                    # Cancel all tasks
-                    if hasattr(pc, '_stop_event'):
-                        pc._stop_event.set()
-
-                    tasks = []
-                    for attr in ['_asr_task', '_llm_task', '_tts_task']:
-                        if hasattr(pc, attr):
-                            task = getattr(pc, attr)
-                            if not task.done():
-                                task.cancel()
-                                tasks.append(task)
-
-                    if tasks:
-                        await asyncio.gather(*tasks, return_exceptions=True)
-
-                    await pc.close()
-                    self.pcs.discard(pc)
-                    if conversation_id is not None:
-                        loop = asyncio.get_running_loop()
-                        await loop.run_in_executor(None, end_conversation, conversation_id)
-                    self.logger.info(f"{pc_id}: Connection cleaned up")
-
-            @pc.on("track")
-            async def on_track(track):
-                self.logger.info(f"Current {pc_id}: Received {track.kind} track")
-                if track.kind == "audio":
-                    recorder.addTrack(track)
-                    # Create control events to stop or interrupt connection
-                    pc._stop_event = stop_event
-                    pc._interrupt_event = interrupt_event
-                    try:
-                        pc._asr_task = asyncio.create_task(
-                            asr_client.generate(
-                                track,
-                                asr_queue,
-                                audio_player,
-                                stop_event,
-                                interrupt_event,
-                                vad=vad,
-                                resampler=resampler,
-                                timeout=TIMEOUT,
-                            )
-                        )
-
-                        pc._llm_task = asyncio.create_task(
-                            llm_client.generate(
-                                asr_queue,
-                                llm_queue,
-                                stop_event,
-                                interrupt_event,
-                                system=SYSTEM_PROMPT,
-                                max_tokens=MAX_TOKENS,
-                                timeout=TIMEOUT,
-                            )
-                        )
-
-                        pc._tts_task = asyncio.create_task(
-                            tts_client.generate(
-                                llm_queue,
-                                audio_queue,
-                                stop_event,
-                                interrupt_event,
-                                samples_per_frame=SAMPLES_PER_FRAME,
-                                timeout=TIMEOUT,
-                            )
-                        )
-
-                    except Exception as e:
-                        self.logger.error(f"Current {pc_id}: Pipeline error: {e}")
-                        traceback.print_exc()
-
-                @track.on("ended")
-                async def on_ended():
-                    msg = f"Current {pc_id}: Track ended"
-                    self.logger.info(msg)
-                    server_to_client(pc.log_channel, msg)
-                    if hasattr(pc, "_stop_event"):
-                        pc._stop_event.set()
-                    await recorder.stop()
-
-            # Complete WebRTC setup
-            await pc.setRemoteDescription(offer)
-            await recorder.start()
-
-            answer = await pc.createAnswer()
-            await pc.setLocalDescription(answer)
-
-            response = web.Response(
-                content_type="application/json",
-                text=json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
+            pc._asr_task = asyncio.create_task(
+                asr_client.generate(
+                    pc._client_track,
+                    asr_queue,
+                    audio_player,
+                    stop_event,
+                    interrupt_event,
+                    vad=vad,
+                    resampler=resampler,
+                    timeout=TIMEOUT,
+                )
             )
+
+            pc._llm_task = asyncio.create_task(
+                llm_client.generate(
+                    asr_queue,
+                    llm_queue,
+                    stop_event,
+                    interrupt_event,
+                    system=SYSTEM_PROMPT,
+                    max_tokens=MAX_TOKENS,
+                    timeout=TIMEOUT,
+                )
+            )
+
+            pc._tts_task = asyncio.create_task(
+                tts_client.generate(
+                    llm_queue,
+                    audio_queue,
+                    stop_event,
+                    interrupt_event,
+                    samples_per_frame=SAMPLES_PER_FRAME,
+                    timeout=TIMEOUT,
+                )
+            )
+
+            reply(True)
+            msg = '\n' + '=' * 50 + '\nStart Recording\n' + '=' * 50
+            self.logger.info(msg)
+            server_to_client(pc.log_channel, msg)
+            self.logger.info(f"{pc_id}: Session activated")
         except Exception:
-            self.logger.error(f"Failed to establish WebRTC connection: {traceback.format_exc()}")
-            if pc is not None:
-                self.pcs.discard(pc)
-                await pc.close()
-            if user is not None:
-                decrement_conversation_count(user["id"])
-            else:
-                decrement_guest_conversation_count(guest_token)
-            response = web.json_response(
-                {"ok": False, "message": "Failed to establish connection — please try again."},
-                status=500,
-            )
-            if guest_token is not None:
-                self._set_guest_cookie(response, request, guest_token)
-            return response
-
-        if guest_token is not None:
-            self._set_guest_cookie(response, request, guest_token)
-        return response
+            self.logger.error(f"{pc_id}: Activation failed: {traceback.format_exc()}")
+            pc._activated = False
+            pc._conversation_id = None
+            if charged:
+                # A failed activation shouldn't cost part of a limited quota.
+                if user is not None:
+                    decrement_conversation_count(user["id"])
+                else:
+                    decrement_guest_conversation_count(guest_token)
+            # Put the connection back into a consistent warm state so the client
+            # can retry: resume draining and re-arm the idle reaper.
+            if pc._client_track is not None and pc.connectionState not in ("closed", "failed"):
+                pc._drain_task = asyncio.create_task(self._drain_track(pc._client_track))
+                pc._idle_task = asyncio.create_task(self._close_if_never_activated(pc, pc_id))
+            reply(False, "Failed to start the session — please try again.")
 
     async def on_shutdown(self, app: web.Application) -> None:
         """

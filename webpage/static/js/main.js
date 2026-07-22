@@ -9,6 +9,10 @@ let silentTrack = null;
 let silentAudioSource = null;
 let connectWatchdogId = null;
 let offerAbortController = null;
+let activated = false;          // server has charged quota and started the AI pipeline
+let startRequested = false;     // a user-initiated Start is in flight (gates alerts/spinner)
+let activateOnConnect = false;  // cold start: activate as soon as the connection connects
+let pendingActivate = null;     // { resolve, reject, timer } awaiting activate_result
 
 // Overall budget from clicking Start to reaching connectionState 'connected'. Covers a hung
 // /offer request, a stuck ICE gathering step, or ICE connectivity checks that never succeed -
@@ -170,6 +174,36 @@ function ensureAudioContext() {
     return audioContext;
 }
 
+// Shared handler for messages from the server, whichever data channel they arrive on.
+function handleServerMessage(event) {
+    try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'activate_result') {
+            if (pendingActivate) {
+                clearTimeout(pendingActivate.timer);
+                const pending = pendingActivate;
+                pendingActivate = null;
+                if (data.ok) {
+                    pending.resolve(data);
+                } else {
+                    pending.reject(new Error(data.message || 'Could not start the session.'));
+                }
+            }
+        } else if (data.type === 'transcription') {
+            appendToTranscription(data.message, 'user');
+        } else if (data.type === 'response') {
+            appendToTranscription(data.message, 'ai');
+        } else if (data.type === 'stop_word') {
+            addLogMessage('Stop word detected — session paused', 'client');
+            stop();
+        } else if (data.type === 'log') {
+            addLogMessage(data.message, 'server');
+        }
+    } catch (e) {
+        addLogMessage('Server: ' + event.data, 'server');
+    }
+}
+
 function createPeerConnection() {
     // Local mode (empty ICE servers) is currently disabled; always connect online.
     const config = {
@@ -197,23 +231,7 @@ function createPeerConnection() {
         addLogMessage('Data channel opened', 'client');
     };
     
-    logChannel.onmessage = function(event) {
-        try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'transcription') {
-                appendToTranscription(data.message, 'user');
-            } else if (data.type === 'response') {
-                appendToTranscription(data.message, 'ai');
-            } else if (data.type === 'stop_word') {
-                addLogMessage('Stop word detected — session paused', 'client');
-                stop();
-            } else if (data.type === 'log') {
-                addLogMessage(data.message, 'server');
-            }
-        } catch (e) {
-            addLogMessage('Received: ' + event.data, 'server');
-        }
-    };
+    logChannel.onmessage = handleServerMessage;
     
     logChannel.onerror = function(error) {
         addLogMessage('Data channel error: ' + error, 'error');
@@ -231,8 +249,14 @@ function createPeerConnection() {
             // Genuine ICE/DTLS failure - neither STUN nor TURN produced a working path.
             clearConnectWatchdog();
             setConnecting(false);
-            addLogMessage('Connection failed — check your network and try again', 'error');
-            alert('Connection failed — check your network and try again.');
+            if (startRequested || activated) {
+                addLogMessage('Connection failed — check your network and try again', 'error');
+                alert('Connection failed — check your network and try again.');
+            } else {
+                // Background preconnect failed - nobody is waiting, don't alert.
+                // start() will fall back to a cold connect when clicked.
+                console.warn('Warm connection failed');
+            }
             fullStop();
         } else if (["disconnected", "closed"].includes(pc.connectionState)) {
             // "closed" is usually our own doing (fullStop() called pc.close()); "disconnected"
@@ -242,33 +266,20 @@ function createPeerConnection() {
             fullStop();
         } else if (pc.connectionState === "connected") {
             clearConnectWatchdog();
-            setConnecting(false);
-            addLogMessage("WebRTC connection established — you may now speak", 'client');
-            setRecordingIndicator(true);
+            addLogMessage("Connection ready", 'client');
+            // Recording indicator and "you may now speak" wait for activation -
+            // a warm connection isn't listening to anything yet.
+            if (activateOnConnect) {
+                activateOnConnect = false;
+                activateSession();
+            }
         }
     };
 
     pc.ondatachannel = function(event) {
         const channel = event.channel;
         addLogMessage(`Received data channel: ${channel.label}`, 'client');
-        
-        channel.onmessage = function(event) {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'transcription') {
-                    appendToTranscription(data.message, 'user');
-                } else if (data.type === 'response') {
-                    appendToTranscription(data.message, 'ai');
-                } else if (data.type === 'stop_word') {
-                    addLogMessage('Stop word detected — session paused', 'client');
-                    stop();
-                } else if (data.type === 'log') {
-                    addLogMessage(data.message, 'server');
-                }
-            } catch (e) {
-                addLogMessage('Server: ' + event.data, 'server');
-            }
-        };
+        channel.onmessage = handleServerMessage;
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -469,17 +480,130 @@ function negotiate() {
         }
         console.error("Negotiation failed:", error);
         setConnecting(false);
-        addLogMessage('Failed to connect: ' + error.message, 'error');
-        alert(error.message);
+        if (startRequested || activated) {
+            addLogMessage('Failed to connect: ' + error.message, 'error');
+            alert(error.message);
+        }
         fullStop();
     });
 }
 
-function start() {
-    console.log("Starting WebRTC connection...");
+// Give the connection handshake a hard deadline instead of leaving the user staring at
+// "Connecting..." until the browser's own (much slower, ~30s) failure detection kicks in.
+function armConnectWatchdog() {
+    clearConnectWatchdog();
+    const watchdogPc = pc;
+    connectWatchdogId = setTimeout(() => {
+        connectWatchdogId = null;
+        if (pc === watchdogPc && pc && pc.connectionState !== 'connected') {
+            console.warn(`Connection attempt timed out after ${CONNECT_TIMEOUT_MS}ms`);
+            addLogMessage('Connection timed out — check your network and try again', 'error');
+            alert('Connection timed out — check your network and try again.');
+            setConnecting(false);
+            fullStop();
+        }
+    }, CONNECT_TIMEOUT_MS);
+}
 
-    // Soft restart: PC is still connected, mic was only muted — just unmute.
-    if (pc && pc.connectionState === 'connected' && localAudioTrack && !localAudioTrack.enabled) {
+// Open the WebRTC transport on page load, sending the placeholder track instead of the
+// mic, so the slow ICE/DTLS handshake is already done by the time the user clicks Start.
+// The server charges nothing for this warm connection; quota and the AI pipeline only
+// start on the "activate" message sent from start().
+function preconnect() {
+    if (pc) return;
+    console.log("Pre-connecting WebRTC transport...");
+    pc = createPeerConnection();
+    audioSender = pc.addTrack(getSilentTrack());
+    negotiate();
+}
+
+const ACTIVATE_TIMEOUT_MS = 10000;
+
+// Ask the server to start the session on this connection and wait for its
+// activate_result reply. Rejects when quota is exhausted or the server doesn't answer.
+function sendActivate() {
+    return new Promise((resolve, reject) => {
+        if (!logChannel || logChannel.readyState !== 'open') {
+            reject(new Error('Connection not ready — please try again.'));
+            return;
+        }
+        pendingActivate = {
+            resolve,
+            reject,
+            timer: setTimeout(() => {
+                pendingActivate = null;
+                reject(new Error('Server did not respond — please try again.'));
+            }, ACTIVATE_TIMEOUT_MS)
+        };
+        logChannel.send(JSON.stringify({ type: 'activate', processingMode: getProcessingMode() }));
+    });
+}
+
+// Second half of Start: grab the real mic, swap it onto the already-warm connection,
+// and tell the server to charge the conversation and spin up the ASR/LLM/TTS pipeline.
+// Nothing billable happens server-side until this runs.
+function activateSession() {
+    // Audio constraints that match your server
+    const constraints = {
+        audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            sampleRate: 24000,
+            channelCount: 1
+        },
+        video: false
+    };
+
+    navigator.mediaDevices.getUserMedia(constraints)
+        .then((stream) => {
+            console.log("Got user media, tracks:", stream.getTracks().length);
+            localStream = stream;
+            localAudioTrack = stream.getAudioTracks()[0];
+
+            if (localAudioTrack) {
+                console.log("Local audio track settings:", localAudioTrack.getSettings());
+                localAudioTrack.onended = () => {
+                    console.log("Local audio track ended");
+                };
+            }
+
+            return audioSender.replaceTrack(localAudioTrack);
+        })
+        .then(() => sendActivate())
+        .then(() => {
+            activated = true;
+            startRequested = false;
+            clearConnectWatchdog();
+            setConnecting(false);
+            setRecordingIndicator(true);
+            addLogMessage('Session started — you may now speak', 'client');
+        })
+        .catch((err) => {
+            console.error("Failed to start session:", err);
+            startRequested = false;
+            clearConnectWatchdog();
+            setConnecting(false);
+            // Put the placeholder back and release the mic so nothing stays hot
+            // while the connection idles in its warm state.
+            if (audioSender) {
+                audioSender.replaceTrack(getSilentTrack()).catch(() => {});
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+                localAudioTrack = null;
+            }
+            addLogMessage('Failed to start: ' + err.message, 'error');
+            alert(err.message);
+        });
+}
+
+function start() {
+    console.log("Starting session...");
+
+    // Soft restart: session already active, mic was only muted — just unmute.
+    if (pc && pc.connectionState === 'connected' && activated && localAudioTrack && !localAudioTrack.enabled) {
         localAudioTrack.enabled = true;
         if (audioSender) {
             audioSender.replaceTrack(localAudioTrack)
@@ -507,83 +631,53 @@ function start() {
     const processingMode = getProcessingMode();
     addLogMessage(`Starting with ${processingMode} processing mode`, 'info');
 
+    startRequested = true;
     setConnecting(true);
 
     // Ensure audio context is created on user interaction
     ensureAudioContext();
 
+    // Warm connection from page load is ready — skip negotiation entirely.
+    if (pc && pc.connectionState === 'connected') {
+        activateSession();
+        return;
+    }
+
+    // Preconnect still in flight — piggyback on it and activate once it lands.
+    if (pc && ['new', 'connecting'].includes(pc.connectionState)) {
+        activateOnConnect = true;
+        armConnectWatchdog();
+        return;
+    }
+
+    // No usable connection (preconnect failed, was reaped, or died) — full cold start.
     if (pc) {
         fullStop();
     }
+    startRequested = true; // fullStop() cleared it
+    setConnecting(true);
 
     pc = createPeerConnection();
-
-    // Give the whole handshake a hard deadline instead of leaving the user staring at
-    // "Connecting..." until the browser's own (much slower, ~30s) failure detection kicks in.
-    clearConnectWatchdog();
-    const watchdogPc = pc;
-    connectWatchdogId = setTimeout(() => {
-        connectWatchdogId = null;
-        if (pc === watchdogPc && pc.connectionState !== 'connected') {
-            console.warn(`Connection attempt timed out after ${CONNECT_TIMEOUT_MS}ms`);
-            addLogMessage('Connection timed out — check your network and try again', 'error');
-            alert('Connection timed out — check your network and try again.');
-            setConnecting(false);
-            fullStop();
-        }
-    }, CONNECT_TIMEOUT_MS);
-
-    // Audio constraints that match your server
-    const constraints = {
-        audio: {
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false,
-            sampleRate: 24000,
-            channelCount: 1
-        },
-        video: false
-    };
-
-    navigator.mediaDevices.getUserMedia(constraints)
-        .then((stream) => {
-            console.log("Got user media, tracks:", stream.getTracks().length);
-            localStream = stream;
-            localAudioTrack = stream.getAudioTracks()[0];
-            console.log("Local audio track:", localAudioTrack);
-            
-            if (localAudioTrack) {
-                console.log("Local audio track settings:", localAudioTrack.getSettings());
-                
-                localAudioTrack.onended = () => {
-                    console.log("Local audio track ended");
-                };
-            }
-            
-            // Add tracks to peer connection
-            stream.getTracks().forEach(track => {
-                console.log("Adding track to PC:", track.kind);
-                const sender = pc.addTrack(track, stream);
-                if (track.kind === 'audio') {
-                    audioSender = sender;
-                }
-                console.log("Track added, sender:", sender);
-            });
-            
-            return negotiate();
-        })
-        .catch((err) => {
-            console.error("Failed to access microphone:", err);
-            clearConnectWatchdog();
-            alert("Failed to access microphone: " + err.message);
-            setConnecting(false);
-        });
+    audioSender = pc.addTrack(getSilentTrack());
+    activateOnConnect = true;
+    armConnectWatchdog();
+    negotiate();
 }
 
 // Hard disconnect: close PC and release all tracks
 function fullStop() {
     console.log("Full disconnect...");
     clearConnectWatchdog();
+    activated = false;
+    activateOnConnect = false;
+    startRequested = false;
+    if (pendingActivate) {
+        // Wake up an in-flight activateSession() so its catch releases the mic.
+        clearTimeout(pendingActivate.timer);
+        const pending = pendingActivate;
+        pendingActivate = null;
+        pending.reject(new Error('Connection closed'));
+    }
     if (offerAbortController) {
         offerAbortController.abort();
         offerAbortController = null;
@@ -612,6 +706,12 @@ function fullStop() {
 }
 
 function stop() {
+    // Not activated yet: there's no session to stop, and closing the warm connection
+    // would throw away the pre-negotiated transport for no reason.
+    if (!activated && pc && pc.connectionState === 'connected') {
+        console.log("Stop pressed before Start — keeping warm connection");
+        return;
+    }
     // Soft stop: mute mic and silence remote audio but keep WebRTC connection alive.
     // This avoids ICE renegotiation on the next start().
     if (pc && pc.connectionState === 'connected' && localAudioTrack) {
@@ -652,6 +752,30 @@ function initAudioOnInteraction() {
 document.addEventListener('click', initAudioOnInteraction, { once: true });
 document.addEventListener('keydown', initAudioOnInteraction, { once: true });
 document.addEventListener('touchstart', initAudioOnInteraction, { once: true });
+
+// Pre-connect on page load so Start only needs mic access + an activate message.
+// Gated on the Start button existing, since this script may be loaded by pages
+// that don't host the conversation UI.
+function preconnectWhenReady() {
+    if (document.getElementById('startButton')) {
+        preconnect();
+    }
+}
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', preconnectWhenReady);
+} else {
+    preconnectWhenReady();
+}
+
+// Close the connection when the page goes away so warm connections don't pile up
+// server-side across refreshes and closed tabs. (The server also reaps idle warm
+// connections after a timeout as a backstop.)
+window.addEventListener('pagehide', () => {
+    if (pc) {
+        try { pc.close(); } catch (e) { /* already closed */ }
+        pc = null;
+    }
+});
 
 // Optional: Add debugging info
 function getAudioContextInfo() {
