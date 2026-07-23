@@ -50,18 +50,19 @@
     </div>
     
     <div class="system-prompt-row" id="systemPromptRow">
-      <label for="systemPromptInput" class="system-prompt-label">Customize the AI's role (optional)</label>
-      <input type="text" id="systemPromptInput" class="system-prompt-input"
-             placeholder="e.g. You are a patient French tutor who only speaks French." maxlength="2000">
+      <label for="systemPromptInput" class="system-prompt-label" id="systemPromptLabel">Customize the AI's role (optional)</label>
+      <div class="input-wrapper">
+        <input type="text" id="systemPromptInput" class="system-prompt-input"
+               placeholder="e.g. You are a patient French tutor who only speaks French." maxlength="2000">
+        <button class="mic-button" id="micButton" type="button" aria-label="Start conversation" onclick="onMicButtonClick()">
+          <svg class="mic-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" fill="currentColor"/>
+            <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
-
-    <button class="mic-button" id="micButton" type="button" aria-label="Start conversation" onclick="onMicButtonClick()">
-      <svg class="mic-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" fill="currentColor"/>
-        <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        <path d="M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-    </button>
 
     <div class="transcription-container hidden" id="transcriptionContainer">
       <div class="transcription-box" id="transcriptionBox">

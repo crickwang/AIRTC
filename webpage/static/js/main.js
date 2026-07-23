@@ -134,12 +134,53 @@ function setRecordingIndicator(isRecording) {
     button.setAttribute('aria-label', isRecording ? 'Pause conversation' : 'Resume conversation');
 }
 
+// Animate the mic button from its current in-flow position (next to the prompt input)
+// to its fixed top-right docked spot, using FLIP: freeze it at its measured on-screen
+// rect via inline styles first, then let the .docked CSS rule's transition take over —
+// this avoids the instant teleport that switching position:relative -> fixed would
+// otherwise cause (position itself can't be transitioned, only numeric offsets can).
+function dockMicButton(button) {
+    if (button.classList.contains('docked')) return;
+
+    // getBoundingClientRect() reports the post-transform rendered box (the idle CSS
+    // centers the button with transform: translateY(-50%)) — freezing to that rect
+    // via inline top/left must also cancel the transform, or it'd apply a second time
+    // on top of the already-transform-adjusted coordinates.
+    const rect = button.getBoundingClientRect();
+    button.style.position = 'fixed';
+    button.style.top = rect.top + 'px';
+    button.style.left = rect.left + 'px';
+    button.style.width = rect.width + 'px';
+    button.style.height = rect.height + 'px';
+    button.style.margin = '0';
+    button.style.transform = 'none';
+
+    void button.offsetWidth; // force layout so the frozen position above is committed
+
+    // The input can now be safely hidden — the button is frozen via inline styles and
+    // no longer depends on the input wrapper's layout (they're siblings, not parent/child).
+    document.getElementById('systemPromptLabel')?.classList.add('hidden');
+    document.getElementById('systemPromptInput')?.classList.add('hidden');
+
+    button.classList.add('docked');
+    requestAnimationFrame(() => {
+        // Clear the inline overrides so the .docked class's own top/left/width/height
+        // (and its transition) take effect, animating from the frozen spot to the corner.
+        button.style.position = '';
+        button.style.top = '';
+        button.style.left = '';
+        button.style.width = '';
+        button.style.height = '';
+        button.style.margin = '';
+        button.style.transform = '';
+    });
+}
+
 // Single mic button toggles between start() and stop() based on whether audio is
 // currently being sent, and docks to the top-right corner permanently on first click.
 function onMicButtonClick() {
     const button = document.getElementById('micButton');
-    if (button) button.classList.add('docked');
-    document.getElementById('systemPromptRow')?.classList.add('hidden');
+    if (button) dockMicButton(button);
     if (button && button.classList.contains('recording')) {
         stop();
     } else {

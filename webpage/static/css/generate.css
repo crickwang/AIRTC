@@ -83,29 +83,33 @@ body {
 
 .system-prompt-row {
     position: fixed;
-    top: calc(50% - 130px);
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
-    width: min(480px, 90vw);
-    text-align: center;
+    transform: translate(-50%, -50%);
+    width: min(640px, 94vw);
     z-index: 19;
-    transition: opacity 0.3s ease;
+    text-align: left;
 }
 
 .system-prompt-label {
     display: block;
-    font-size: 0.85rem;
+    font-size: 1.1rem;
     font-weight: 600;
-    color: #6b7280;
-    margin-bottom: 0.4rem;
+    color: #4b5563;
+    margin-bottom: 0.6rem;
+}
+
+/* Positioning context for the mic button, which overlaps the input's right edge. */
+.input-wrapper {
+    position: relative;
 }
 
 .system-prompt-input {
     width: 100%;
-    padding: 0.65rem 1rem;
-    border-radius: 10px;
+    padding: 1.1rem 4.5rem 1.1rem 1.4rem; /* extra right padding so text clears the mic */
+    border-radius: 14px;
     border: 1px solid #dee2e6;
-    font-size: 0.95rem;
+    font-size: 1.15rem;
     font-family: inherit;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
@@ -116,14 +120,16 @@ body {
     box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
 }
 
+/* Idle state: sits inside the input, anchored to its right edge and vertically
+   centered — a sibling of the input (not its parent's only child), so hiding the
+   input directly on activation never hides the mic along with it. */
 .mic-button {
-    position: fixed;
+    position: absolute;
     top: 50%;
-    left: 50%;
-    right: auto;
-    transform: translate(-50%, -50%);
-    width: 120px;
-    height: 120px;
+    right: 8px;
+    transform: translateY(-50%);
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
     background-color: #0d6efd;
     color: white;
@@ -133,8 +139,8 @@ body {
     justify-content: center;
     cursor: pointer;
     box-shadow: 0 12px 40px rgba(13, 110, 253, 0.35);
-    transition: top 0.5s ease, left 0.5s ease, right 0.5s ease, transform 0.5s ease,
-                width 0.5s ease, height 0.5s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+    transition: top 0.5s ease, left 0.5s ease, right 0.5s ease, width 0.5s ease, height 0.5s ease,
+                background-color 0.2s ease, box-shadow 0.2s ease;
     z-index: 20;
 }
 
@@ -147,8 +153,8 @@ body {
 }
 
 .mic-icon {
-    width: 50px;
-    height: 50px;
+    width: 26px;
+    height: 26px;
     flex-shrink: 0;
     transition: width 0.5s ease, height 0.5s ease;
 }
@@ -159,11 +165,16 @@ body {
 }
 
 /* One-way transition: docks to the top-right corner on first click and stays there.
-   top is offset below the fixed navbar (~72px tall) plus a gap, so it doesn't overlap it. */
+   Applied via JS FLIP (main.js dockMicButton()) so it animates smoothly out of the
+   flex row instead of teleporting when position switches from relative to fixed.
+   top is offset below the fixed navbar (~72px tall) plus a gap, so it doesn't overlap it.
+   left (not right) is used throughout so the transition has numeric start/end values —
+   "right" would require left:auto, which cannot be animated. */
 .mic-button.docked {
+    position: fixed;
     top: 88px;
-    left: auto;
-    right: 24px;
+    left: calc(100vw - 80px);
+    right: auto;
     transform: none;
     width: 56px;
     height: 56px;
@@ -178,7 +189,7 @@ body {
 .mic-button.recording::before {
     content: '';
     position: absolute;
-    inset: -8px;
+    inset: -4px;
     border-radius: 50%;
     border: 2px solid rgba(220, 53, 69, 0.5);
     animation: rec-pulse 1.4s ease-in-out infinite;
@@ -187,7 +198,7 @@ body {
 .mic-button.connecting::after {
     content: '';
     position: absolute;
-    inset: -8px;
+    inset: -4px;
     border-radius: 50%;
     border: 3px solid rgba(13, 110, 253, 0.25);
     border-top-color: #0d6efd;
