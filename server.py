@@ -305,8 +305,10 @@ class WebPage:
                     if msg_type == "clear_audio" and hasattr(pc, '_audio_player'):
                         pc._audio_player.request_interrupt()
                         self.logger.info(f"{pc_id}: Audio buffer cleared by client request")
-                    elif msg_type == "activate": 
-                        asyncio.create_task(self._activate_session(pc, pc_id))
+                    elif msg_type == "activate":
+                        asyncio.create_task(
+                            self._activate_session(pc, pc_id, system_prompt=data.get("system_prompt"))
+                        )
 
             @pc.on("connectionstatechange")
             async def on_connectionstatechange():
@@ -406,7 +408,7 @@ class WebPage:
             await pc.close()
             self.pcs.discard(pc)
 
-    async def _activate_session(self, pc, pc_id):
+    async def _activate_session(self, pc, pc_id, system_prompt=None):
         """
         Handle the client's "activate" data-channel message: charge quota, build the
         ASR/LLM/TTS pipeline, and start it on the already-negotiated connection.
@@ -414,6 +416,9 @@ class WebPage:
         This is the second half of what offer() used to do in one shot. It only runs
         when the user actually clicks Start, so external API clients are never
         constructed for a visitor who merely loads the page.
+
+        system_prompt, if the client supplied a non-empty one, overrides the (now
+        empty-by-default) global SYSTEM_PROMPT for this session only.
         """
         def reply(ok, message=""):
             try:
@@ -533,13 +538,14 @@ class WebPage:
                 )
             )
 
+            effective_system_prompt = (system_prompt or "").strip() or SYSTEM_PROMPT
             pc._llm_task = asyncio.create_task(
                 llm_client.generate(
                     asr_queue,
                     llm_queue,
                     stop_event,
                     interrupt_event,
-                    system=SYSTEM_PROMPT,
+                    system=effective_system_prompt,
                     max_tokens=MAX_TOKENS,
                     timeout=TIMEOUT,
                 )

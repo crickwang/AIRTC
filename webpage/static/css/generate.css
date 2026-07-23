@@ -81,6 +81,41 @@ body {
     text-align: center;
 }
 
+.system-prompt-row {
+    position: fixed;
+    top: calc(50% - 130px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(480px, 90vw);
+    text-align: center;
+    z-index: 19;
+    transition: opacity 0.3s ease;
+}
+
+.system-prompt-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #6b7280;
+    margin-bottom: 0.4rem;
+}
+
+.system-prompt-input {
+    width: 100%;
+    padding: 0.65rem 1rem;
+    border-radius: 10px;
+    border: 1px solid #dee2e6;
+    font-size: 0.95rem;
+    font-family: inherit;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.system-prompt-input:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+}
+
 .mic-button {
     position: fixed;
     top: 50%;

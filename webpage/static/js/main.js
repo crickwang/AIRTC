@@ -139,6 +139,7 @@ function setRecordingIndicator(isRecording) {
 function onMicButtonClick() {
     const button = document.getElementById('micButton');
     if (button) button.classList.add('docked');
+    document.getElementById('systemPromptRow')?.classList.add('hidden');
     if (button && button.classList.contains('recording')) {
         stop();
     } else {
@@ -548,7 +549,13 @@ function sendActivate() {
                 reject(new Error('Server did not respond — please try again.'));
             }, ACTIVATE_TIMEOUT_MS)
         };
-        logChannel.send(JSON.stringify({ type: 'activate', processingMode: getProcessingMode() }));
+        const promptInput = document.getElementById('systemPromptInput');
+        const systemPrompt = promptInput ? promptInput.value.trim() : '';
+        logChannel.send(JSON.stringify({
+            type: 'activate',
+            processingMode: getProcessingMode(),
+            system_prompt: systemPrompt
+        }));
     });
 }
 

@@ -10,11 +10,7 @@ asr_alternative_languages: [en-US, ja-JP, ko,KR]
 
 whisper_language: ~  # null = auto-detect any language; set e.g. 'zh' or 'en' to fix a language
 
-llm_system_prompt: You are an agent that handles the user input and generate the response.
-                   The User input is transcribed from the user's speech, and may contain errors. 
-                   You should try to understand the user's intention and generate a response accordingly.
-                   The text you generate will be converted to speech and played back to the user, 
-                   so it should be concise and natural.
+llm_system_prompt: # No default persona — the user supplies one via the generate.html prompt box.
 llm_model: ernie-4.5-0.3b
 
 edge_tts_voice: zh-CN-YunyangNeural
