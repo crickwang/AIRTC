@@ -144,9 +144,23 @@ body {
   border: 1px solid rgba(15, 23, 42, 0.06);
 }
 
-.feature-icon {
-  font-size: 2rem;
-  margin-bottom: 0.75rem;
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: none;
+}
+
+.features .feature-card:nth-child(2) {
+  transition-delay: 0.1s;
+}
+
+.features .feature-card:nth-child(3) {
+  transition-delay: 0.2s;
 }
 
 .feature-card h3 {

@@ -113,24 +113,37 @@ function appendToTranscription(text, role) {
     }
 }
 
-// Toggle the connecting spinner/label on the Start button while the initial
+// Toggle the connecting spinner ring on the mic button while the initial
 // handshake (getUserMedia -> offer/answer -> ICE) is in flight.
 function setConnecting(isConnecting) {
-    const button = document.getElementById('startButton');
-    const label = document.getElementById('startButtonLabel');
+    const button = document.getElementById('micButton');
     if (!button) return;
     button.classList.toggle('connecting', isConnecting);
     button.disabled = isConnecting;
-    if (label) label.textContent = isConnecting ? 'Connecting...' : 'Start';
+    if (isConnecting) button.setAttribute('aria-label', 'Connecting...');
 }
 
-// Toggle the persistent recording indicator (pulsing dot + label). On whenever the mic's
+// Toggle the mic button's recording state (red + pulsing ring) — on whenever the mic's
 // real audio is actually being sent to the server — after connect, after resuming from a
-// pause — off whenever it won't be, e.g. paused or disconnected.
+// pause — off whenever it won't be, e.g. paused or disconnected. Also the source of truth
+// for onMicButtonClick()'s decision between starting and stopping.
 function setRecordingIndicator(isRecording) {
-    const status = document.getElementById('recordingStatus');
-    if (!status) return;
-    status.classList.toggle('active', isRecording);
+    const button = document.getElementById('micButton');
+    if (!button) return;
+    button.classList.toggle('recording', isRecording);
+    button.setAttribute('aria-label', isRecording ? 'Pause conversation' : 'Resume conversation');
+}
+
+// Single mic button toggles between start() and stop() based on whether audio is
+// currently being sent, and docks to the top-right corner permanently on first click.
+function onMicButtonClick() {
+    const button = document.getElementById('micButton');
+    if (button) button.classList.add('docked');
+    if (button && button.classList.contains('recording')) {
+        stop();
+    } else {
+        start();
+    }
 }
 
 // Add log message to the frontend
@@ -754,10 +767,10 @@ document.addEventListener('keydown', initAudioOnInteraction, { once: true });
 document.addEventListener('touchstart', initAudioOnInteraction, { once: true });
 
 // Pre-connect on page load so Start only needs mic access + an activate message.
-// Gated on the Start button existing, since this script may be loaded by pages
+// Gated on the mic button existing, since this script may be loaded by pages
 // that don't host the conversation UI.
 function preconnectWhenReady() {
-    if (document.getElementById('startButton')) {
+    if (document.getElementById('micButton')) {
         preconnect();
     }
 }

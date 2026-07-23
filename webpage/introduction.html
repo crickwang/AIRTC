@@ -46,23 +46,37 @@
   </div>
 
   <div class="features">
-    <div class="feature-card">
-      <div class="feature-icon">🎙️</div>
+    <div class="feature-card reveal">
       <h3>Speak naturally</h3>
       <p>Your microphone audio streams over WebRTC with low latency — no typing required.</p>
     </div>
-    <div class="feature-card">
-      <div class="feature-icon">🧠</div>
+    <div class="feature-card reveal">
       <h3>AI listens and thinks</h3>
       <p>Speech is transcribed and passed to an LLM that understands context and responds.</p>
     </div>
-    <div class="feature-card">
-      <div class="feature-icon">🔊</div>
+    <div class="feature-card reveal">
       <h3>Hear it talk back</h3>
       <p>Responses are spoken back to you instantly, so the conversation feels alive.</p>
     </div>
   </div>
 
   <script src="/static/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Reveal each feature card as it scrolls into view.
+    const revealEls = document.querySelectorAll('.reveal');
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) {
+      revealEls.forEach((el) => el.classList.add('visible'));
+    } else {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.2 });
+      revealEls.forEach((el) => observer.observe(el));
+    }
+  </script>
 </body>
 </html>

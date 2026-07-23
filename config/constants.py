@@ -36,7 +36,7 @@ STREAMING_LIMIT = 60000  # 1 minute, in ms
 FUN_ASR_MODEL = settings.get_config("funasr_model")
 ASR_ENCODER_CHUNK_LOOK_BACK = 4
 ASR_DECODER_CHUNK_LOOK_BACK = 1
-VAD_THRESHOLD = 1500  # Voice Activity Detection threshold
+VAD_THRESHOLD = 6000  # Voice Activity Detection threshold — SimpleVAD docs: noise < 2000, speech > 20000
 TIMEOUT = 600 # in sec
 
 # Constants for Baidu ASR
