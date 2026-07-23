@@ -51,7 +51,7 @@ jobs:
       run: pip install pytest pyyaml python-dotenv supabase
 
     - name: Run auth store tests
-      run: pytest test_auth_store.py -v
+      run: pytest tests/test_auth_store.py -v
 
   # ── Config validation ────────────────────────────────────────────────────────
   config-check:
