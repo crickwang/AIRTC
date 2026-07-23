@@ -16,8 +16,8 @@
   
   <nav class="navbar">
     <div class="container-fluid">
-      <a class="navbar-brand" href="#">AIRTC</a>
-      <ul class="navbar-nav flex-row ms-auto">
+      <a class="navbar-brand" href="/">AIRTC</a>
+      <ul class="navbar-nav flex-row ms-auto align-items-center">
         <li class="nav-item">
           <a class="nav-link" href="introduction.html">Introduction</a>
         </li>
@@ -25,7 +25,10 @@
           <a class="nav-link" href="https://github.com/crickwang/AIRTC" target="_blank">GitHub</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="https://crickwang.github.io/website/" target="_blank">Portfolio</a>
+          <a class="nav-link" href="https://crickwang.github.io/website/" target="_blank">Contact</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-login-btn" href="index.html">Login</a>
         </li>
       </ul>
     </div>
@@ -46,28 +49,23 @@
       </div>
     </div>
     
-    <div class="buttons-row">
-      <button class="btn-start" id="startButton" onclick="start()">
-        <span class="btn-spinner" id="startSpinner"></span>
-        <span id="startButtonLabel">Start</span>
-      </button>
-      <button class="btn-stop" id="stopButton" onclick="stop()">Stop</button>
-    </div>
+    <button class="mic-button" id="micButton" type="button" aria-label="Start conversation" onclick="onMicButtonClick()">
+      <svg class="mic-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" fill="currentColor"/>
+        <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
 
-    <div class="recording-status" id="recordingStatus" aria-live="polite">
-      <span class="rec-dot"></span>
-      <span class="rec-label">Recording — you may now speak</span>
-    </div>
-
-    <div class="transcription-container">
+    <div class="transcription-container hidden" id="transcriptionContainer">
       <div class="transcription-box" id="transcriptionBox">
       </div>
     </div>
-    
-    <div class="clear-btn-container">
+
+    <div class="clear-btn-container hidden" id="clearBtnContainer">
       <button class="btn-clear" onclick="clearTranscription()">Clear Transcription</button>
     </div>
-    
+
     <audio id="remoteAudio" autoplay></audio>
   </div>
 

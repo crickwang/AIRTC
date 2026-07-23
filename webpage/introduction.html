@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIRTC - Real-time AI Voice Conversation</title>
+
+  <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/introduction.css" rel="stylesheet">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">AIRTC</a>
+      <ul class="navbar-nav flex-row ms-auto align-items-center">
+        <li class="nav-item">
+          <a class="nav-link" href="https://github.com/crickwang/AIRTC" target="_blank">GitHub</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="https://crickwang.github.io/website/" target="_blank">Contact</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-login-btn" href="index.html">Login</a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <h1>Talk to AI, in real time.</h1>
+    <p class="hero-subtitle">
+      AIRTC streams your voice straight into a live AI conversation over WebRTC — speak,
+      and hear a natural, spoken response back.
+    </p>
+
+    <div class="hero-actions">
+      <a class="btn-hero primary" href="generate.html">Try it now</a>
+      <a class="btn-hero secondary" href="index.html">Sign up for more</a>
+    </div>
+    <p class="hero-note">No account needed — try a few conversations free, right in your browser.</p>
+  </div>
+
+  <div class="features">
+    <div class="feature-card reveal">
+      <h3>Speak naturally</h3>
+      <p>Your microphone audio streams over WebRTC with low latency — no typing required.</p>
+    </div>
+    <div class="feature-card reveal">
+      <h3>AI listens and thinks</h3>
+      <p>Speech is transcribed and passed to an LLM that understands context and responds.</p>
+    </div>
+    <div class="feature-card reveal">
+      <h3>Hear it talk back</h3>
+      <p>Responses are spoken back to you instantly, so the conversation feels alive.</p>
+    </div>
+  </div>
+
+  <script src="/static/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Reveal each feature card as it scrolls into view.
+    const revealEls = document.querySelectorAll('.reveal');
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) {
+      revealEls.forEach((el) => el.classList.add('visible'));
+    } else {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.2 });
+      revealEls.forEach((el) => observer.observe(el));
+    }
+  </script>
+</body>
+</html>
