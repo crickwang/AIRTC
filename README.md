@@ -77,6 +77,14 @@ To set up the client for AIRTC, you may follow these steps:
 
 Select which platform each stage uses via CLI flags when starting the server: `--asr` (default `google`), `--llm` (default `google`), `--tts` (default `azure`), `--vad` (default `simple`).
 
+The `--vad` flag takes one of three detectors:
+
+| Value | How it works | Notes |
+| --- | --- | --- |
+| `simple` | RMS energy of a single frame against `VAD_THRESHOLD` | Default. Cheapest, but can't tell speech from door slams or keyboard clicks, and the right threshold depends on mic gain and room. |
+| `multiFrame` | Same energy measure, but needs several consecutive loud frames to start and several quiet ones to stop | More robust to isolated noise, and replays the audio buffered just before detection so the first syllable isn't clipped. |
+| `fsmn` | FunASR's FSMN-VAD neural model | Most accurate and needs no threshold tuning. No new dependency (funasr is already required), but the weights are downloaded from ModelScope on first run and cached under `~/.cache/modelscope`, so the first startup needs network access. |
+
 Two kinds of settings are used throughout: **environment variables** (secrets — set via `.env` or your shell) and **`config/config.yaml` keys** (non-secret settings — model names, regions, voices, prompts). Don't confuse the two; setting a config.yaml-only key as an environment variable (or vice versa) will silently be ignored.
 
 - **Google ASR**:

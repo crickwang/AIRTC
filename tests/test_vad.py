@@ -1,13 +1,16 @@
-"""Unit tests for the energy-based VADs.
+"""Unit tests for the VAD implementations.
 
-Pure numpy, no ML deps or network — safe to run in CI unlike tests/test_server.py.
+Pure numpy, no network and no model weights — safe to run in CI unlike
+tests/test_server.py. The FSMN tests drive the streaming/chunking logic against a
+scripted stand-in for funasr's AutoModel, so they cover the integration but not the
+model's own accuracy; only the resampling test needs torch and skips without it.
 Frames are TIME_PER_CHUNK = 10ms, so frame counts map directly to milliseconds.
 """
 
 import numpy as np
 import pytest
 
-from vad.vad import MultiFrameVAD, SimpleVAD, VADFactory
+from vad.vad import FSMNVAD, MultiFrameVAD, SimpleVAD, VADFactory
 
 THRESHOLD = 6000
 
@@ -183,3 +186,134 @@ class TestVADFactory:
     def test_bad_kwargs_raise(self):
         with pytest.raises(TypeError):
             VADFactory.create("simple", not_a_real_parameter=1)
+
+
+class FakeFSMNModel:
+    """Stands in for funasr's AutoModel so the integration logic can be tested
+    without downloading weights. Returns the scripted segment list per call."""
+
+    def __init__(self, script=None):
+        self.calls = []
+        self.script = list(script or [])
+
+    def generate(self, **kwargs):
+        self.calls.append(kwargs)
+        value = self.script.pop(0) if self.script else []
+        return [{"key": "fake", "value": value}]
+
+
+@pytest.fixture
+def fsmn(monkeypatch):
+    """Build an FSMNVAD wired to a scripted fake model, at the model's own rate so
+    no resampling (and therefore no torch) is involved."""
+
+    def _build(script=None, **kwargs):
+        model = FakeFSMNModel(script)
+        monkeypatch.setattr(FSMNVAD, "_load_model", staticmethod(lambda *a, **k: model))
+        monkeypatch.setattr(FSMNVAD, "_build_resampler", staticmethod(lambda *a, **k: None))
+        kwargs.setdefault("input_sample_rate", FSMNVAD.MODEL_SAMPLE_RATE)
+        return FSMNVAD(**kwargs), model
+
+    return _build
+
+
+class TestFSMNVADChunking:
+    def test_model_not_run_until_a_full_chunk_arrives(self, fsmn):
+        # 60ms chunks at 16kHz = 960 samples = 6 frames of 10ms.
+        vad, model = fsmn(chunk_size_ms=60)
+        frame = quiet(samples=160)
+        for _ in range(5):
+            vad.is_speech(frame)
+        assert model.calls == []
+        vad.is_speech(frame)
+        assert len(model.calls) == 1
+
+    def test_chunk_handed_to_model_is_the_configured_length(self, fsmn):
+        vad, model = fsmn(chunk_size_ms=60)
+        feed(vad, quiet(samples=160), 6)
+        assert len(model.calls[0]["input"]) == vad.chunk_samples
+
+    def test_audio_is_normalised_to_unit_range(self, fsmn):
+        """The funasr frontend scales by 1<<15, so it expects [-1, 1] not int16."""
+        vad, model = fsmn(chunk_size_ms=60)
+        feed(vad, loud(samples=160), 6)
+        audio = model.calls[0]["input"]
+        assert audio.dtype == np.float32
+        assert np.allclose(audio, 20000 / 32768.0)
+        assert np.abs(audio).max() <= 1.0
+
+    def test_model_told_the_rate_it_expects(self, fsmn):
+        vad, model = fsmn(chunk_size_ms=60)
+        feed(vad, quiet(samples=160), 6)
+        assert model.calls[0]["fs"] == FSMNVAD.MODEL_SAMPLE_RATE
+        assert model.calls[0]["is_final"] is False
+
+    def test_cache_is_reused_across_chunks(self, fsmn):
+        """Streaming state lives in the cache; a fresh one each call would reset it."""
+        vad, model = fsmn(chunk_size_ms=60)
+        feed(vad, quiet(samples=160), 12)
+        assert len(model.calls) == 2
+        assert model.calls[0]["cache"] is model.calls[1]["cache"]
+
+
+class TestFSMNVADState:
+    def test_open_segment_starts_speech(self, fsmn):
+        vad, _ = fsmn(script=[[[100, -1]]], chunk_size_ms=60)
+        assert feed(vad, quiet(samples=160), 6)
+
+    def test_close_segment_ends_speech(self, fsmn):
+        vad, _ = fsmn(script=[[[100, -1]], [], [[-1, 500]]], chunk_size_ms=60)
+        frame = quiet(samples=160)
+        assert feed(vad, frame, 6)     # [beg, -1] opens
+        assert feed(vad, frame, 6)     # [] leaves it open
+        assert not feed(vad, frame, 6)  # [-1, end] closes
+
+    def test_self_contained_segment_ends_speech(self, fsmn):
+        vad, _ = fsmn(script=[[[100, 400]]], chunk_size_ms=60)
+        assert not feed(vad, quiet(samples=160), 6)
+
+    def test_state_holds_between_inferences(self, fsmn):
+        """Frames arrive faster than the model runs, so the last verdict must persist."""
+        vad, _ = fsmn(script=[[[100, -1]]], chunk_size_ms=60)
+        frame = quiet(samples=160)
+        assert feed(vad, frame, 6)
+        for _ in range(5):
+            assert vad.is_speech(frame)
+
+    def test_empty_frame_reports_state_without_buffering(self, fsmn):
+        vad, model = fsmn(script=[[[100, -1]]], chunk_size_ms=60)
+        feed(vad, quiet(samples=160), 6)
+        pending = vad.pending_samples
+        assert vad.is_speech(np.array([], dtype=np.int16))
+        assert vad.pending_samples == pending
+        assert len(model.calls) == 1
+
+    def test_preroll_is_inherited(self, fsmn):
+        vad, _ = fsmn(chunk_size_ms=60, preroll_frames=20)
+        feed(vad, quiet(samples=160), 30)
+        assert len(vad.drain_preroll()) == 19
+
+
+class TestFSMNVADResampling:
+    def test_no_resampler_at_native_rate(self):
+        assert FSMNVAD._build_resampler(FSMNVAD.MODEL_SAMPLE_RATE) is None
+
+    def test_resamples_when_pipeline_rate_differs(self, monkeypatch):
+        """The pipeline feeds 24kHz (ASR_SAMPLE_RATE) but the model is 16kHz-only."""
+        torch = pytest.importorskip("torch")
+        model = FakeFSMNModel()
+        calls = []
+
+        def fake_resample(tensor):
+            calls.append(len(tensor))
+            return torch.from_numpy(np.zeros(960, dtype=np.float32))
+
+        monkeypatch.setattr(FSMNVAD, "_load_model", staticmethod(lambda *a, **k: model))
+        monkeypatch.setattr(FSMNVAD, "_build_resampler", staticmethod(lambda *a, **k: fake_resample))
+        vad = FSMNVAD(input_sample_rate=24000, chunk_size_ms=60)
+
+        # 60ms at 24kHz = 1440 samples = 6 frames of 240.
+        assert vad.chunk_samples == 1440
+        feed(vad, quiet(samples=240), 6)
+        assert calls == [1440]
+        assert len(model.calls[0]["input"]) == 960  # 60ms at 16kHz

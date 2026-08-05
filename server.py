@@ -484,6 +484,9 @@ class WebPage:
             vad = create_client("vad",
                                 self.args.vad,
                                 threshold=VAD_THRESHOLD,
+                                # The frames handed to the VAD come out of the resampler
+                                # below, so model-based VADs know what rate to expect.
+                                input_sample_rate=ASR_SAMPLE_RATE,
                                 )
             # create_client swallows construction errors and returns None. Downstream
             # the ASR loops gate on `if not vad or vad.is_speech(frame)`, so a None VAD
@@ -641,7 +644,9 @@ class WebPage:
         parser.add_argument("--asr", type=str, default="google", help="ASR model to use")
         parser.add_argument("--llm", type=str, default="google", help="LLM model to use")
         parser.add_argument("--tts", type=str, default="azure", help="TTS model to use")
-        parser.add_argument("--vad", type=str, default="simple", help="VAD model to use")
+        parser.add_argument("--vad", type=str, default="simple",
+                            help="VAD model to use: simple (energy), multiFrame (energy "
+                                 "with hysteresis), or fsmn (FunASR neural VAD)")
         return parser.parse_args()
 
 if __name__ == "__main__":
