@@ -10,6 +10,18 @@ asr_alternative_languages: [en-US, ja-JP, ko,KR]
 
 whisper_language: ~  # null = auto-detect any language; set e.g. 'zh' or 'en' to fix a language
 
+# Voice Activity Detection. Pick the detector with --vad (multiFrame, simple, fsmn).
+# Frames are TIME_PER_CHUNK = 10ms, so the frame counts below are in units of 10ms.
+vad_threshold: 6000              # RMS energy above which a frame counts as speech. Depends
+                                 # on mic gain and room noise, so it may need tuning per
+                                 # deployment; the two energy detectors both use it.
+vad_speech_frames_required: 3    # multiFrame only: consecutive loud frames to start speech.
+                                 # Higher rejects more clicks but delays barge-in.
+vad_silence_frames_required: 10  # multiFrame only: consecutive quiet frames to end speech.
+                                 # Adds to the ASR loop's own 500ms before a turn closes.
+vad_preroll_frames: 10           # Frames of audio kept from before the detection point and
+                                 # replayed into ASR, so the quiet start of a word isn't cut.
+
 llm_system_prompt: # No default persona — the user supplies one via the generate.html prompt box.
 llm_model: ernie-4.5-0.3b
 

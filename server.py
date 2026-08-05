@@ -481,13 +481,19 @@ class WebPage:
             stop_event = pc._stop_event
             interrupt_event = pc._interrupt_event
 
-            vad = create_client("vad",
-                                self.args.vad,
-                                threshold=VAD_THRESHOLD,
-                                # The frames handed to the VAD come out of the resampler
-                                # below, so model-based VADs know what rate to expect.
-                                input_sample_rate=ASR_SAMPLE_RATE,
-                                )
+            vad_kwargs = {
+                "threshold": VAD_THRESHOLD,
+                "preroll_frames": VAD_PREROLL_FRAMES,
+                # The frames handed to the VAD come out of the resampler below, so
+                # model-based VADs know what rate to expect.
+                "input_sample_rate": ASR_SAMPLE_RATE,
+            }
+            if self.args.vad == "multiFrame":
+                # Only the hysteresis detector has onset/release frame counts; passing
+                # them to the others would (correctly) raise.
+                vad_kwargs["speech_frames_required"] = VAD_SPEECH_FRAMES_REQUIRED
+                vad_kwargs["silence_frames_required"] = VAD_SILENCE_FRAMES_REQUIRED
+            vad = create_client("vad", self.args.vad, **vad_kwargs)
             # create_client swallows construction errors and returns None. Downstream
             # the ASR loops gate on `if not vad or vad.is_speech(frame)`, so a None VAD
             # would mean every frame counts as speech — an interrupt and a new ASR

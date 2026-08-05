@@ -87,7 +87,16 @@ AIRTC 的访问控制基于账号/访客系统，而不是单一的共享密码�
 | `simple` | 只比较单帧的 RMS 能量与 `VAD_THRESHOLD` | 触发最快，打断响应最灵敏，但任何一个响亮的帧都会被当作语音。 |
 | `fsmn` | FunASR 的 FSMN-VAD 神经网络模型 | 最准确且无需调阈值，因为它分类的是频谱特征而非音量。不引入新依赖（funasr 本就是必需依赖），但首次运行需要联网从 ModelScope 下载权重并缓存到 `~/.cache/modelscope`。目前模型在第一次会话时加载，而非服务器启动时。 |
 
-两种能量检测器比较的都是原始音量，因此 `config/constants.py` 中的 `VAD_THRESHOLD` 取决于麦克风增益与环境噪声；`fsmn` 则不需要调这个值。
+相关参数都在 `config/config.yaml` 中，无需改代码或重新部署。每帧为 10ms，因此下面的帧数单位即 10ms：
+
+```yaml
+vad_threshold: 6000              # 超过该 RMS 能量的帧才算作语音
+vad_speech_frames_required: 3    # 仅 multiFrame：判定语音开始所需的连续帧数
+vad_silence_frames_required: 10  # 仅 multiFrame：判定语音结束所需的连续帧数
+vad_preroll_frames: 10           # 检测点之前保留并补发给 ASR 的音频帧数
+```
+
+两种能量检测器比较的都是原始音量，因此 `vad_threshold` 取决于麦克风增益与环境噪声，建议结合实际录音校准——两个 VAD 类的文档字符串对该量纲的描述并不一致，6000 只是一个未经实测验证的折中值。`vad_silence_frames_required` 是控制轮次延迟的主要参数：它会叠加在 ASR 循环自身的 500ms 之上，取 10 时整体约 600ms，取 3 时约 530ms。
 
 全文用到两类配置：**环境变量**（密钥类，通过 `.env` 或 shell 设置）和 **`config/config.yaml` 中的键**（非密钥设置，如模型名称、区域、语音、提示词等）。两者不要混淆——把一个只属于 config.yaml 的键当作环境变量设置（反之亦然）会被静默忽略。
 

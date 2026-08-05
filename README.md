@@ -85,7 +85,16 @@ The `--vad` flag takes one of three detectors. All three buffer the audio from j
 | `simple` | RMS energy of a single frame against `VAD_THRESHOLD` | Fastest to trigger, so best for barge-in latency, but treats any loud frame as speech. |
 | `fsmn` | FunASR's FSMN-VAD neural model | Most accurate and needs no threshold tuning, since it classifies spectral features rather than loudness. No new dependency (funasr is already required), but the weights are downloaded from ModelScope on first run and cached under `~/.cache/modelscope`, so the first run needs network access. The model currently loads on the first session rather than at startup. |
 
-Both energy detectors compare raw loudness, so `VAD_THRESHOLD` in `config/constants.py` depends on mic gain and room noise; `fsmn` is the option that avoids tuning it.
+Tuning lives in `config/config.yaml` — no code change or redeploy needed. Frames are 10ms, so the frame counts are in units of 10ms:
+
+```yaml
+vad_threshold: 6000              # RMS energy above which a frame counts as speech
+vad_speech_frames_required: 3    # multiFrame only: consecutive loud frames to start
+vad_silence_frames_required: 10  # multiFrame only: consecutive quiet frames to stop
+vad_preroll_frames: 10           # audio kept from before detection and replayed to ASR
+```
+
+Both energy detectors compare raw loudness, so `vad_threshold` depends on mic gain and room noise and is worth checking against your own levels — the two VAD classes disagree in their docstrings about the scale, and 6000 is an unvalidated middle ground. `vad_silence_frames_required` is the main turn-latency knob: it adds to the ASR loop's own 500ms before a turn closes, so 10 costs ~600ms end-to-end and 3 costs ~530ms.
 
 Two kinds of settings are used throughout: **environment variables** (secrets — set via `.env` or your shell) and **`config/config.yaml` keys** (non-secret settings — model names, regions, voices, prompts). Don't confuse the two; setting a config.yaml-only key as an environment variable (or vice versa) will silently be ignored.
 

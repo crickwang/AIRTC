@@ -36,7 +36,14 @@ STREAMING_LIMIT = 60000  # 1 minute, in ms
 FUN_ASR_MODEL = settings.get_config("funasr_model")
 ASR_ENCODER_CHUNK_LOOK_BACK = 4
 ASR_DECODER_CHUNK_LOOK_BACK = 1
-VAD_THRESHOLD = 6000  # Voice Activity Detection threshold — SimpleVAD docs: noise < 2000, speech > 20000
+# Voice Activity Detection. See config.yaml for what each one does.
+# NOTE: the two VAD classes disagree in their docstrings about the RMS scale
+# (MultiFrameVAD says speech > 2000, SimpleVAD says speech > 20000), so 6000 is a
+# middle ground that has not been validated against real microphone levels.
+VAD_THRESHOLD = settings.get_config("vad_threshold", 6000)
+VAD_SPEECH_FRAMES_REQUIRED = settings.get_config("vad_speech_frames_required", 3)
+VAD_SILENCE_FRAMES_REQUIRED = settings.get_config("vad_silence_frames_required", 10)
+VAD_PREROLL_FRAMES = settings.get_config("vad_preroll_frames", 10)
 TIMEOUT = 600 # in sec
 
 # Constants for Baidu ASR

@@ -1,8 +1,11 @@
+import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
 
 from register import register
+
+logger = logging.getLogger(__name__)
 
 
 class VAD(ABC):
@@ -125,7 +128,7 @@ class MultiFrameVAD(VAD):
             if not self.is_currently_speaking:
                 self.speech_frame_count += 1
                 if self.speech_frame_count >= self.speech_frames_required:
-                    print(f"VAD: Speech detected (energy: {rms_energy:.1f})")
+                    logger.info(f"VAD: Speech detected (energy: {rms_energy:.1f})")
                     self.is_currently_speaking = True
                     self.speech_frame_count = 0
         else:
@@ -134,7 +137,7 @@ class MultiFrameVAD(VAD):
             if self.is_currently_speaking:
                 self.silence_frame_count += 1
                 if self.silence_frame_count >= self.silence_frames_required:
-                    print(f"VAD: Speech ended (energy: {rms_energy:.1f})")
+                    logger.info(f"VAD: Speech ended (energy: {rms_energy:.1f})")
                     self.is_currently_speaking = False
                     self.silence_frame_count = 0
         return self.is_currently_speaking
