@@ -27,7 +27,7 @@ class MultiFrameVAD(VAD):
     Not advised to use this VAD, as it may swallow first several frames. 
     You may adjust you own VAD if you want.
     """
-    def __init__(self, threshold, speech_frames_required=3):
+    def __init__(self, threshold, speech_frames_required=3, silence_frames_required=10):
         """
         Initialize MultiFrameVAD instance
         Args:
@@ -36,10 +36,17 @@ class MultiFrameVAD(VAD):
                        In general, noise < 1000 while speech > 2000.
                        Maybe adjusted based on the noise level of the environment.
             speech_frames_required: The number of consecutive frames required to confirm speech.
+            silence_frames_required: The number of consecutive quiet frames required to
+                       confirm speech has ended (release hangover). At TIME_PER_CHUNK=10ms
+                       the default is 100ms, enough to ride over the energy dips between
+                       syllables without delaying end-of-turn much. The ASR loops add their
+                       own max_silence_chunk (500ms) on top of this before closing a turn.
         """
         self.threshold = threshold
         self.speech_frames_required = speech_frames_required
+        self.silence_frames_required = silence_frames_required
         self.speech_frame_count = 0
+        self.silence_frame_count = 0
         self.is_currently_speaking = False
         # store the previous frames and prevent them from being swallowed if they
         # are meaningful speeches.
@@ -70,15 +77,28 @@ class MultiFrameVAD(VAD):
 
         rms_energy = np.sqrt(np.mean(frame.astype(np.float32) ** 2))
 
-        # Use hysteresis for more stable detection
+        # Use hysteresis for more stable detection: speech starts only after
+        # speech_frames_required consecutive loud frames and ends only after
+        # silence_frames_required consecutive quiet frames.
         self.populate(frame)
         if rms_energy > self.threshold:
-            self.speech_frame_count += 1
-            if self.speech_frame_count >= self.speech_frames_required:
-                if not self.is_currently_speaking:
+            # A loud frame cancels any release in progress.
+            self.silence_frame_count = 0
+            if not self.is_currently_speaking:
+                self.speech_frame_count += 1
+                if self.speech_frame_count >= self.speech_frames_required:
                     print(f"VAD: Speech detected (energy: {rms_energy:.1f})")
-                self.is_currently_speaking = True
-                self.speech_frame_count = 0
+                    self.is_currently_speaking = True
+                    self.speech_frame_count = 0
+        else:
+            # Onset must be consecutive, so any quiet frame restarts the count.
+            self.speech_frame_count = 0
+            if self.is_currently_speaking:
+                self.silence_frame_count += 1
+                if self.silence_frame_count >= self.silence_frames_required:
+                    print(f"VAD: Speech ended (energy: {rms_energy:.1f})")
+                    self.is_currently_speaking = False
+                    self.silence_frame_count = 0
         return self.is_currently_speaking
 
 @register.add_model("vad", "simple")
