@@ -142,10 +142,14 @@ class MultiFrameVAD(VAD):
 @register.add_model("vad", "simple")
 class SimpleVAD(VAD):
     """
-    A simple Voice Activity Detection (VAD) class 
+    A simple Voice Activity Detection (VAD) class
     that only measures the energy of a single audio frame.
+    It fires on the first frame that crosses the threshold, so it reacts fast but
+    accepts isolated noise (a click or a door slam) as speech. The frames leading up
+    to detection are buffered and handed back by drain_preroll(), since the quiet
+    leading edge of a word sits below the threshold by definition.
     """
-    def __init__(self, threshold, input_sample_rate=None):
+    def __init__(self, threshold, preroll_frames=10, input_sample_rate=None):
         """
         Initialize SimpleVAD instance.
         Args:
@@ -153,10 +157,14 @@ class SimpleVAD(VAD):
             threshold: The energy threshold for detecting speech.
                        In general, noise < 2000 while speech > 20000.
                        Maybe adjusted based on the noise level of the environment.
+            preroll_frames: How many recent frames to keep for drain_preroll(). This
+                       VAD triggers on the frame that crosses the threshold, so without
+                       a look-back the softer onset before it is lost. Default 100ms at
+                       TIME_PER_CHUNK=10ms.
             input_sample_rate: Unused — energy detection is rate-agnostic. Accepted so
                        the pipeline can pass its rate to any VAD uniformly.
         """
-        super().__init__(threshold)
+        super().__init__(threshold, preroll_frames=preroll_frames)
 
     def is_speech(self, frame: np.ndarray) -> bool:
         """
@@ -170,7 +178,8 @@ class SimpleVAD(VAD):
             return False
 
         rms_energy = np.sqrt(np.mean(frame.astype(np.float32) ** 2))
-        return rms_energy > self.threshold
+        self.populate(frame)
+        return bool(rms_energy > self.threshold)
 
 @register.add_model("vad", "fsmn")
 class FSMNVAD(VAD):

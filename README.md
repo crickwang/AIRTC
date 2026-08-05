@@ -75,15 +75,17 @@ If you want an additional layer on top of the account system — e.g. to keep an
 To set up the client for AIRTC, you may follow these steps:
    > note: The client setup is not official, refer to the documentation on the official website if any error happens here. :P
 
-Select which platform each stage uses via CLI flags when starting the server: `--asr` (default `google`), `--llm` (default `google`), `--tts` (default `azure`), `--vad` (default `simple`).
+Select which platform each stage uses via CLI flags when starting the server: `--asr` (default `google`), `--llm` (default `google`), `--tts` (default `azure`), `--vad` (default `multiFrame`).
 
-The `--vad` flag takes one of three detectors:
+The `--vad` flag takes one of three detectors. All three buffer the audio from just before the detection point and replay it into the ASR queue, so the quiet leading edge of a word isn't clipped.
 
 | Value | How it works | Notes |
 | --- | --- | --- |
-| `simple` | RMS energy of a single frame against `VAD_THRESHOLD` | Default. Cheapest, but can't tell speech from door slams or keyboard clicks, and the right threshold depends on mic gain and room. |
-| `multiFrame` | Same energy measure, but needs several consecutive loud frames to start and several quiet ones to stop | More robust to isolated noise, and replays the audio buffered just before detection so the first syllable isn't clipped. |
-| `fsmn` | FunASR's FSMN-VAD neural model | Most accurate and needs no threshold tuning. No new dependency (funasr is already required), but the weights are downloaded from ModelScope on first run and cached under `~/.cache/modelscope`, so the first startup needs network access. |
+| `multiFrame` | RMS energy against `VAD_THRESHOLD`, but needs several consecutive loud frames to start and several quiet ones to stop | Default. Ignores isolated clicks and door slams that a single-frame test accepts. Costs ~30ms more to trigger, and a very short or quiet utterance may not reach the consecutive-frame requirement. |
+| `simple` | RMS energy of a single frame against `VAD_THRESHOLD` | Fastest to trigger, so best for barge-in latency, but treats any loud frame as speech. |
+| `fsmn` | FunASR's FSMN-VAD neural model | Most accurate and needs no threshold tuning, since it classifies spectral features rather than loudness. No new dependency (funasr is already required), but the weights are downloaded from ModelScope on first run and cached under `~/.cache/modelscope`, so the first run needs network access. The model currently loads on the first session rather than at startup. |
+
+Both energy detectors compare raw loudness, so `VAD_THRESHOLD` in `config/constants.py` depends on mic gain and room noise; `fsmn` is the option that avoids tuning it.
 
 Two kinds of settings are used throughout: **environment variables** (secrets — set via `.env` or your shell) and **`config/config.yaml` keys** (non-secret settings — model names, regions, voices, prompts). Don't confuse the two; setting a config.yaml-only key as an environment variable (or vice versa) will silently be ignored.
 

@@ -644,9 +644,10 @@ class WebPage:
         parser.add_argument("--asr", type=str, default="google", help="ASR model to use")
         parser.add_argument("--llm", type=str, default="google", help="LLM model to use")
         parser.add_argument("--tts", type=str, default="azure", help="TTS model to use")
-        parser.add_argument("--vad", type=str, default="simple",
-                            help="VAD model to use: simple (energy), multiFrame (energy "
-                                 "with hysteresis), or fsmn (FunASR neural VAD)")
+        parser.add_argument("--vad", type=str, default="multiFrame",
+                            help="VAD model to use: multiFrame (energy with hysteresis, "
+                                 "default), simple (energy, single frame), or fsmn "
+                                 "(FunASR neural VAD)")
         return parser.parse_args()
 
 if __name__ == "__main__":

@@ -163,8 +163,24 @@ class TestPreroll:
         assert feed(vad, loud(), 5)
         assert len(vad.drain_preroll()) == 4
 
-    def test_simple_vad_has_no_preroll(self):
-        assert SimpleVAD(THRESHOLD).drain_preroll() == []
+    def test_simple_vad_buffers_preroll(self):
+        """SimpleVAD fires on the frame that crosses the threshold, so without a
+        look-back the quieter onset before it would be dropped."""
+        vad = SimpleVAD(THRESHOLD, preroll_frames=10)
+        feed(vad, quiet(), 20)
+        assert vad.is_speech(loud())
+        preroll = vad.drain_preroll()
+        assert len(preroll) == 9
+        assert all(np.array_equal(f, quiet()) for f in preroll)
+
+    def test_simple_vad_preroll_can_be_disabled(self):
+        assert SimpleVAD(THRESHOLD, preroll_frames=0).drain_preroll() == []
+
+    def test_simple_vad_returns_plain_bool(self):
+        """The ASR loops branch on this; numpy scalars would still work but the
+        other VADs return bool, so keep it consistent."""
+        assert SimpleVAD(THRESHOLD).is_speech(loud()) is True
+        assert SimpleVAD(THRESHOLD).is_speech(quiet()) is False
 
 
 class TestVADFactory:
