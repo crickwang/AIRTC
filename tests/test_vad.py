@@ -7,7 +7,7 @@ Frames are TIME_PER_CHUNK = 10ms, so frame counts map directly to milliseconds.
 import numpy as np
 import pytest
 
-from vad.vad import MultiFrameVAD, SimpleVAD
+from vad.vad import MultiFrameVAD, SimpleVAD, VADFactory
 
 THRESHOLD = 6000
 
@@ -119,3 +119,67 @@ class TestMultiFrameVADRelease:
 
         # 10 frames of hangover, then 51 to exceed max_silence_chunk.
         assert silence_count == max_silence_chunk + 1
+
+
+class TestPreroll:
+    """The frames buffer used to be populated but never read, so the audio before
+    the detection point was dropped and the first syllable got clipped."""
+
+    def test_preroll_returns_frames_before_detection(self):
+        vad = MultiFrameVAD(THRESHOLD, speech_frames_required=3, preroll_frames=10)
+        # Enough quiet lead-in to saturate the buffer, then the 3 loud frames
+        # that confirm speech.
+        feed(vad, quiet(), 20)
+        assert feed(vad, loud(), 3)
+
+        preroll = vad.drain_preroll()
+        # Buffer holds 10 frames; the newest is the one just evaluated, excluded here.
+        assert len(preroll) == 9
+        # Oldest first: 7 quiet frames of lead-in, then the first 2 loud frames.
+        assert all(np.array_equal(f, quiet()) for f in preroll[:7])
+        assert all(np.array_equal(f, loud()) for f in preroll[7:])
+
+    def test_preroll_excludes_current_frame(self):
+        """The caller queues the triggering frame itself, so it must not be duplicated."""
+        vad = MultiFrameVAD(THRESHOLD, speech_frames_required=3, preroll_frames=10)
+        feed(vad, quiet(), 20)
+        feed(vad, loud(), 3)
+        assert len(vad.drain_preroll()) == len(vad.frames) - 1
+
+    def test_draining_clears_the_buffer(self):
+        vad = MultiFrameVAD(THRESHOLD, speech_frames_required=3, preroll_frames=10)
+        feed(vad, quiet(), 6)
+        feed(vad, loud(), 3)
+        assert vad.drain_preroll()
+        assert vad.drain_preroll() == []
+
+    def test_buffer_always_covers_the_onset_window(self):
+        """A small preroll_frames must not drop the frames that triggered detection."""
+        vad = MultiFrameVAD(THRESHOLD, speech_frames_required=5, preroll_frames=2)
+        assert len(vad.frames) == 5
+        assert feed(vad, loud(), 5)
+        assert len(vad.drain_preroll()) == 4
+
+    def test_simple_vad_has_no_preroll(self):
+        assert SimpleVAD(THRESHOLD).drain_preroll() == []
+
+
+class TestVADFactory:
+    """create() used to swallow errors and return None. Downstream that reads as
+    'every frame is speech', firing an interrupt and an ASR session per frame."""
+
+    def test_creates_registered_vad(self):
+        assert isinstance(VADFactory.create("simple", threshold=THRESHOLD), SimpleVAD)
+        assert isinstance(VADFactory.create("multiFrame", threshold=THRESHOLD), MultiFrameVAD)
+
+    def test_unknown_algorithm_raises(self):
+        with pytest.raises(ValueError, match="Unknown VAD algorithm"):
+            VADFactory.create("definitely-not-a-vad", threshold=THRESHOLD)
+
+    def test_error_lists_available_algorithms(self):
+        with pytest.raises(ValueError, match="simple"):
+            VADFactory.create("typo", threshold=THRESHOLD)
+
+    def test_bad_kwargs_raise(self):
+        with pytest.raises(TypeError):
+            VADFactory.create("simple", not_a_real_parameter=1)

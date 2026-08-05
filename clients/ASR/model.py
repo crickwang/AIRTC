@@ -401,6 +401,10 @@ class GoogleASR(ASRClient):
                     session_output_queue = queue.Queue(maxsize=1)
                     self.reset()
                     self.init_queue(audio_queue)
+                    # Replay the frames captured just before detection so the first
+                    # syllable isn't clipped, then the frame that triggered it.
+                    for preroll_frame in (vad.drain_preroll() if vad else []):
+                        audio_queue.put(preroll_frame.tobytes())
                     # from numpy array to pcm data
                     audio_bytes = frame.tobytes()
                     audio_queue.put(audio_bytes)
@@ -570,6 +574,10 @@ class WhisperASR(ASRClient):
                     session_output_queue = queue.Queue(maxsize=1)
                     self.closed = False
                     self.audio_queue = audio_queue
+                    # Replay the frames captured just before detection so the first
+                    # syllable isn't clipped, then the frame that triggered it.
+                    for preroll_frame in (vad.drain_preroll() if vad else []):
+                        audio_queue.put(preroll_frame)
                     audio_queue.put(frame)
 
                     def run_whisper_stream():
@@ -760,6 +768,10 @@ class FunASR(ASRClient):
                     session_output_queue = queue.Queue(maxsize=1)
                     self.closed = False
                     self.audio_queue = audio_queue
+                    # Replay the frames captured just before detection so the first
+                    # syllable isn't clipped, then the frame that triggered it.
+                    for preroll_frame in (vad.drain_preroll() if vad else []):
+                        audio_queue.put(preroll_frame)
                     audio_queue.put(frame)
 
                     def run_paraformer():
@@ -928,7 +940,10 @@ class BaiduASR(ASRClient):
                     # New speech detected, interrupt audio playback
                     audio_player.request_interrupt()
                     interrupt_event.set()
-                    audio = b''
+                    # Start from the frames captured just before detection so the first
+                    # syllable isn't clipped, then append the frame that triggered it.
+                    audio = b''.join(preroll_frame.tobytes()
+                                     for preroll_frame in (vad.drain_preroll() if vad else []))
 
                     msg = "ASR: Speech detected - starting transcription"
                     print(msg)

@@ -485,6 +485,13 @@ class WebPage:
                                 self.args.vad,
                                 threshold=VAD_THRESHOLD,
                                 )
+            # create_client swallows construction errors and returns None. Downstream
+            # the ASR loops gate on `if not vad or vad.is_speech(frame)`, so a None VAD
+            # would mean every frame counts as speech — an interrupt and a new ASR
+            # session per frame. Fail the activation instead; the handler below refunds
+            # the quota and puts the connection back into a retryable warm state.
+            if vad is None:
+                raise RuntimeError(f"Could not create VAD {self.args.vad!r} — see the error above")
             # some ASR may require different sample rate!
             resampler = AudioResampler(rate=ASR_SAMPLE_RATE,
                                        layout=LAYOUT,
