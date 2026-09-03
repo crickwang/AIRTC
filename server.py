@@ -19,7 +19,7 @@ from aiortc.mediastreams import MediaStreamError
 from av.audio.resampler import AudioResampler
 
 from audio_player.audio_player import AudioPlayer
-from auth_store import (
+from db import (
     GUEST_CONVERSATION_LIMIT,
     GUEST_TOKEN_TTL_SECONDS,
     add_message,
