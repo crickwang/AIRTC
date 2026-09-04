@@ -14,9 +14,7 @@ import requests
 from aiortc import AudioStreamTrack
 from aiortc.mediastreams import MediaStreamError
 from av.audio.resampler import AudioResampler
-from funasr import AutoModel
 from google.cloud import speech_v1 as speech
-from pywhispercpp.model import Model as whisper_model
 
 from clients.utils import *
 from config.constants import FUN_ASR_MODEL, ROOT, STREAMING_LIMIT, TIMEOUT
@@ -502,6 +500,11 @@ class WhisperASR(ASRClient):
             stop_word (str, optional): Stop word for ASR. Defaults to None.
         """
         super().__init__()
+        # Imported here, not at module top: pywhispercpp is only needed for this
+        # backend, and keeping it out of the default import chain keeps the base
+        # install (and the Docker image) free of local-ASR dependencies.
+        from pywhispercpp.model import Model as whisper_model
+
         self.model = whisper_model(model=model, models_dir=model_dir, **kwargs)
         self.closed = True
         self.audio_queue = None
@@ -692,6 +695,10 @@ class FunASR(ASRClient):
             encoder_chunk_look_back (int): Number of chunks to look back for encoder self-attention.
             decoder_chunk_look_back (int): Number of encoder chunks to look back for decoder cross-attention.
         '''
+        # Lazy import for the same reason as the whisper backend: funasr pulls in
+        # torch, which the Google/online path never needs.
+        from funasr import AutoModel
+
         self.model = AutoModel(model=os.path.join(ROOT, 'model', model_path))
         self.chunk_size = chunk_size
         self.encoder_chunk_look_back = encoder_chunk_look_back

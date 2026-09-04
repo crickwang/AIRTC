@@ -1,0 +1,18 @@
+# Extras for running ASR on the machine itself (`--asr funasr` / `--asr whisper`)
+# instead of a cloud API. Pulls in torch (~170 MB CPU wheel, several GB with CUDA)
+# and needs the weights in model/ (paraformer-zh-streaming, ggml-large-v3-turbo).
+#
+#   pip install -r requirements-local-asr.txt
+#
+# On a machine without a GPU, install torch from the CPU index first:
+#   pip install torch==2.7.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cpu
+-r requirements.txt
+torch==2.7.1
+torchaudio==2.7.1
+funasr==1.2.6
+modelscope==1.28.1
+pywhispercpp==1.3.3
+soundfile==0.13.1
+sounddevice==0.5.2
+pydub==0.25.1
+SpeechRecognition==3.14.3
