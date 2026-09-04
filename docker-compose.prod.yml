@@ -1,0 +1,20 @@
+# Production overlay for the VM, applied on top of docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build app
+#
+# The image is built on the VM from the checked-out source (base file's `build: .`).
+# Postgres is Supabase, so there is no db service; DATABASE_URL comes from the VM's .env.
+#
+# network_mode: host is deliberate. aiortc picks UDP media ports at call time from a
+# wide range; bridged networking only forwards ports listed under `ports`, so the HTTP
+# handshake would succeed and audio would silently never arrive.
+
+services:
+  app:
+    image: airtc:prod
+    network_mode: host
+    ports: !reset []
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    volumes: !reset
+      - ./logs:/app/logs
+    depends_on: !reset []

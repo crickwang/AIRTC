@@ -1,0 +1,36 @@
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: airtc
+      POSTGRES_PASSWORD: airtc_dev
+      POSTGRES_DB: airtc_dev
+    ports:
+      - "5435:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airtc -d airtc_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    image: airtc:local
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://airtc:airtc_dev@db:5432/airtc_dev
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./model:/app/model:ro
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

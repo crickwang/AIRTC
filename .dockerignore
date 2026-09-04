@@ -1,0 +1,49 @@
+# Secrets and local state — never in the image
+.env
+key/
+auth.db
+auth.dev.db
+logs/
+work_logs/
+*.log
+
+# Model weights (~1.7 GB) are bind-mounted at runtime, see docker-compose.yml
+model/
+seamless/
+references/
+
+# Local-only scratch dirs and notes
+/asr/
+/llm/
+/tts/
+init_tests/
+HISTORY.md
+vad_assessment.md
+temp.py
+foo.py
+afoo.py
+openai_realtime.py
+
+# Tooling
+.git/
+.github/
+.claude/
+.idea/
+.vscode/
+node_modules/
+__pycache__/
+.ruff_cache/
+.pytest_cache/
+*.pyc
+tests/
+conftest.py
+pyproject.toml
+package.json
+package-lock.json
+.eslintrc.json
+deploy.sh
+deploy.yml
+apprunner.yaml
+Dockerfile
+docker-compose*.yml
+.dockerignore

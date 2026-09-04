@@ -5,7 +5,7 @@
 # and WebPage._drain_track directly, with a fake peer-connection object and a fake
 # create_client() so no real aiortc negotiation, network I/O, or ASR/LLM/TTS client
 # construction happens. The quota/guest logic runs against a real (tmp) sqlite DB via
-# auth_store, mirroring tests/test_auth_store.py's isolation fixture.
+# db; the isolated_db fixture in tests/conftest.py gives each test a clean schema.
 
 import asyncio
 import json
@@ -14,18 +14,10 @@ from types import SimpleNamespace
 
 import pytest
 
-import auth_store
+import db
 import server
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(autouse=True)
-def isolated_db(tmp_path, monkeypatch):
-    """Point auth_store at a throwaway sqlite file so tests never touch a real auth.db."""
-    monkeypatch.setattr(auth_store, "DB_PATH", tmp_path / "test_auth.db")
-    monkeypatch.setattr(auth_store, "APP_ENV", "development")
-    auth_store.init_auth_db()
 
 
 @pytest.fixture(autouse=True)
@@ -141,7 +133,7 @@ class TestActivationQuota:
     # A signed-in user under their limit should activate and be charged exactly once.
     async def test_signed_in_user_success_charges_once(self):
         wp = make_webpage()
-        user = auth_store.create_user("alice", "hunter2")
+        user = db.create_user("alice", "hunter2")
         pc = make_pc(_user=user)
 
         await wp._activate_session(pc, "PC-3")
@@ -149,7 +141,7 @@ class TestActivationQuota:
 
         assert pc._activated is True
         assert pc._conversation_id is not None
-        count, _ = auth_store.get_conversation_usage(user["id"])
+        count, _ = db.get_conversation_usage(user["id"])
         assert count == 1
         activate_results = [m for m in pc.log_channel.sent if m["type"] == "activate_result"]
         assert activate_results == [{"type": "activate_result", "ok": True, "message": ""}]
@@ -157,16 +149,16 @@ class TestActivationQuota:
     # A signed-in user at their limit must be rejected without an extra charge.
     async def test_signed_in_user_over_limit_rejected(self):
         wp = make_webpage()
-        user = auth_store.create_user("bob", "hunter2")
-        auth_store.set_conversation_limit("bob", 1)
-        auth_store.increment_conversation_count(user["id"])  # pre-fill to the limit
+        user = db.create_user("bob", "hunter2")
+        db.set_conversation_limit("bob", 1)
+        db.increment_conversation_count(user["id"])  # pre-fill to the limit
         pc = make_pc(_user=user)
 
         await wp._activate_session(pc, "PC-4")
 
         assert pc._activated is False
         assert pc._conversation_id is None
-        count, limit = auth_store.get_conversation_usage(user["id"])
+        count, limit = db.get_conversation_usage(user["id"])
         assert (count, limit) == (1, 1)
         assert pc.log_channel.sent[-1]["ok"] is False
         assert "limit" in pc.log_channel.sent[-1]["message"].lower()
@@ -174,7 +166,7 @@ class TestActivationQuota:
     # A guest under their trial limit should activate; guest conversations aren't persisted.
     async def test_guest_success_charges_once(self):
         wp = make_webpage()
-        guest_token = auth_store.create_guest()
+        guest_token = db.create_guest()
         pc = make_pc(_guest_token=guest_token)
 
         await wp._activate_session(pc, "PC-5")
@@ -182,20 +174,20 @@ class TestActivationQuota:
 
         assert pc._activated is True
         assert pc._conversation_id is None
-        assert auth_store.get_guest_conversation_count(guest_token) == 1
+        assert db.get_guest_conversation_count(guest_token) == 1
 
     # A guest who has used up their trial must be rejected without an extra charge.
     async def test_guest_over_limit_rejected(self):
         wp = make_webpage()
-        guest_token = auth_store.create_guest()
-        for _ in range(auth_store.GUEST_CONVERSATION_LIMIT):
-            auth_store.increment_guest_conversation_count(guest_token)
+        guest_token = db.create_guest()
+        for _ in range(db.GUEST_CONVERSATION_LIMIT):
+            db.increment_guest_conversation_count(guest_token)
         pc = make_pc(_guest_token=guest_token)
 
         await wp._activate_session(pc, "PC-6")
 
         assert pc._activated is False
-        assert auth_store.get_guest_conversation_count(guest_token) == auth_store.GUEST_CONVERSATION_LIMIT
+        assert db.get_guest_conversation_count(guest_token) == db.GUEST_CONVERSATION_LIMIT
         assert pc.log_channel.sent[-1]["ok"] is False
 
     # An unrecognized/expired guest token should fail cleanly rather than error.
@@ -220,14 +212,14 @@ class TestActivationFailureRollback:
 
         monkeypatch.setattr(server, "create_client", failing_create_client)
         wp = make_webpage()
-        user = auth_store.create_user("carol", "hunter2")
+        user = db.create_user("carol", "hunter2")
         pc = make_pc(_user=user)
 
         await wp._activate_session(pc, "PC-8")
 
         assert pc._activated is False
         assert pc._conversation_id is None
-        count, _ = auth_store.get_conversation_usage(user["id"])
+        count, _ = db.get_conversation_usage(user["id"])
         assert count == 0  # refunded
         assert pc._drain_task is not None  # re-armed for another attempt
         assert pc._idle_task is not None
@@ -243,13 +235,13 @@ class TestActivationFailureRollback:
 
         monkeypatch.setattr(server, "create_client", failing_create_client)
         wp = make_webpage()
-        guest_token = auth_store.create_guest()
+        guest_token = db.create_guest()
         pc = make_pc(_guest_token=guest_token)
 
         await wp._activate_session(pc, "PC-9")
 
         assert pc._activated is False
-        assert auth_store.get_guest_conversation_count(guest_token) == 0  # refunded
+        assert db.get_guest_conversation_count(guest_token) == 0  # refunded
         assert pc._drain_task is not None
         assert pc._idle_task is not None
         await cancel_and_drain(pc._drain_task, pc._idle_task)

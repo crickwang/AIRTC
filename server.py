@@ -19,12 +19,13 @@ from aiortc.mediastreams import MediaStreamError
 from av.audio.resampler import AudioResampler
 
 from audio_player.audio_player import AudioPlayer
-from auth_store import (
+from config.constants import *
+from config.logging_config import setup_logging
+from db import (
     GUEST_CONVERSATION_LIMIT,
     GUEST_TOKEN_TTL_SECONDS,
     add_message,
     authenticate_user,
-    backup_to_supabase,
     create_conversation,
     create_guest,
     create_session,
@@ -32,15 +33,12 @@ from auth_store import (
     decrement_conversation_count,
     decrement_guest_conversation_count,
     end_conversation,
-    get_conversation_usage,
     get_guest_conversation_count,
     get_session_user,
-    increment_conversation_count,
-    increment_guest_conversation_count,
-    init_auth_db,
+    init_db,
+    try_charge_conversation,
+    try_charge_guest_conversation,
 )
-from config.constants import *
-from config.logging_config import setup_logging
 from utils import *
 
 # How long a pre-connected ("warm") peer connection may sit without the client
@@ -102,8 +100,7 @@ class WebPage:
         self.pcs = set()
         self.args = self.generate_args()
         patch_ice_gather_timeout()
-        init_auth_db()
-        backup_to_supabase()
+        init_db()
         self.logger.info("Logging is set up.")
 
     def _set_session_cookie(self, response: web.StreamResponse, request: web.Request, token: str):
@@ -305,8 +302,10 @@ class WebPage:
                     if msg_type == "clear_audio" and hasattr(pc, '_audio_player'):
                         pc._audio_player.request_interrupt()
                         self.logger.info(f"{pc_id}: Audio buffer cleared by client request")
-                    elif msg_type == "activate": 
-                        asyncio.create_task(self._activate_session(pc, pc_id))
+                    elif msg_type == "activate":
+                        asyncio.create_task(
+                            self._activate_session(pc, pc_id, system_prompt=data.get("system_prompt"))
+                        )
 
             @pc.on("connectionstatechange")
             async def on_connectionstatechange():
@@ -406,7 +405,7 @@ class WebPage:
             await pc.close()
             self.pcs.discard(pc)
 
-    async def _activate_session(self, pc, pc_id):
+    async def _activate_session(self, pc, pc_id, system_prompt=None):
         """
         Handle the client's "activate" data-channel message: charge quota, build the
         ASR/LLM/TTS pipeline, and start it on the already-negotiated connection.
@@ -414,6 +413,9 @@ class WebPage:
         This is the second half of what offer() used to do in one shot. It only runs
         when the user actually clicks Start, so external API clients are never
         constructed for a visitor who merely loads the page.
+
+        system_prompt, if the client supplied a non-empty one, overrides the (now
+        empty-by-default) global SYSTEM_PROMPT for this session only.
         """
         def reply(ok, message=""):
             try:
@@ -435,20 +437,18 @@ class WebPage:
         try:
             # Quota is checked and charged here, not at negotiation time, so page
             # views (and failed handshakes) never cost a conversation slot.
+            # Each charge is one conditional UPDATE, so concurrent activations on the
+            # same account can't both squeeze past the limit.
             if user is not None:
-                conversation_count, conversation_limit = get_conversation_usage(user["id"])
-                if conversation_count >= conversation_limit:
+                if not try_charge_conversation(user["id"]):
                     reply(False, "Conversation limit reached")
                     return
-                increment_conversation_count(user["id"])
                 charged = True
                 conversation_id = create_conversation(user["id"])
             else:
-                guest_count = get_guest_conversation_count(guest_token)
-                if guest_count is None or guest_count >= GUEST_CONVERSATION_LIMIT:
+                if not try_charge_guest_conversation(guest_token):
                     reply(False, "Guest trial used up — sign up for more conversations.")
                     return
-                increment_guest_conversation_count(guest_token)
                 charged = True
                 # Guest conversations aren't persisted (no account to attach them to).
 
@@ -533,13 +533,14 @@ class WebPage:
                 )
             )
 
+            effective_system_prompt = (system_prompt or "").strip() or SYSTEM_PROMPT
             pc._llm_task = asyncio.create_task(
                 llm_client.generate(
                     asr_queue,
                     llm_queue,
                     stop_event,
                     interrupt_event,
-                    system=SYSTEM_PROMPT,
+                    system=effective_system_prompt,
                     max_tokens=MAX_TOKENS,
                     timeout=TIMEOUT,
                 )

@@ -57,8 +57,8 @@ webpage.run_web_app()
 ## 访问与密码设置
 AIRTC 的访问控制基于账号/访客系统，而不是单一的共享密码。访问者首先会看到介绍页面，可以选择：
 
-- **以访客身份试用** — 无需账号。每个浏览器默认有 3 次免费试用对话（见 `auth_store.py` 中的 `GUEST_CONVERSATION_LIMIT`），通过 `guest_token` cookie 追踪，访客的对话记录不会被持久化保存。
-- **注册 / 登录** — 注册用户默认拥有更大的配额（默认 30 次对话，见 `auth_store.py` 中的 `DEFAULT_CONVERSATION_LIMIT`），可通过 `auth_store.set_conversation_limit(username, new_limit)` 按用户调整。账号和对话记录保存在本地 SQLite 数据库中（生产环境为 `auth.db`，其他情况下为 `auth.dev.db`，由环境变量 `APP_ENV` 控制）。
+- **以访客身份试用** — 无需账号。每个浏览器默认有 3 次免费试用对话（见 `db.py` 中的 `GUEST_CONVERSATION_LIMIT`），通过 `guest_token` cookie 追踪，访客的对话记录不会被持久化保存。
+- **注册 / 登录** — 注册用户默认拥有更大的配额（默认 30 次对话，见 `db.py` 中的 `DEFAULT_CONVERSATION_LIMIT`），可通过 `db.set_conversation_limit(username, new_limit)` 按用户调整。账号和对话记录保存在 PostgreSQL 中；请在 `.env` 中设置 `DATABASE_URL`（本地开发例如 `postgresql://airtc:airtc_dev@localhost:5434/airtc_dev`，生产环境可填 Supabase 连接串）。测试使用 `TEST_DATABASE_URL`，指向一个可以随意清空的独立数据库。
 
 配额只在真正开始一次会话时（点击"开始"）才会被扣除，仅仅打开页面并不会消耗任何人的配额。
 
