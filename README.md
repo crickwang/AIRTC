@@ -56,7 +56,7 @@ Then, Open your web browser and go to `http://localhost:8081`.
 Access to AIRTC is controlled by an account/guest system, not a single shared password. On first load, a visitor lands on the introduction page and can either:
 
 - **Try as a guest** — no account needed. Each browser gets a limited number of free trial conversations (3 by default, see `GUEST_CONVERSATION_LIMIT` in `db.py`), tracked via a `guest_token` cookie. Guest transcripts aren't persisted.
-- **Sign up / log in** — registered users get a larger quota (30 conversations by default, see `DEFAULT_CONVERSATION_LIMIT` in `db.py`), adjustable per-user via `db.set_conversation_limit(username, new_limit)`. Accounts and conversation history are stored in a local SQLite database (`auth.db` in production, `auth.dev.db` otherwise — controlled by the `APP_ENV` environment variable).
+- **Sign up / log in** — registered users get a larger quota (30 conversations by default, see `DEFAULT_CONVERSATION_LIMIT` in `db.py`), adjustable per-user via `db.set_conversation_limit(username, new_limit)`. Accounts and conversation history are stored in PostgreSQL; set `DATABASE_URL` in `.env` (e.g. `postgresql://airtc:airtc_dev@localhost:5434/airtc_dev` for a local server, or a Supabase connection string in production). Tests use `TEST_DATABASE_URL`, which points at a separate database they are free to wipe.
 
 Quota is only checked when a session is actually started (clicking "Start"), not just from loading the page — so a page view alone never counts against anyone's limit.
 

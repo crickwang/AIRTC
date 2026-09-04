@@ -19,12 +19,13 @@ from aiortc.mediastreams import MediaStreamError
 from av.audio.resampler import AudioResampler
 
 from audio_player.audio_player import AudioPlayer
+from config.constants import *
+from config.logging_config import setup_logging
 from db import (
     GUEST_CONVERSATION_LIMIT,
     GUEST_TOKEN_TTL_SECONDS,
     add_message,
     authenticate_user,
-    backup_to_supabase,
     create_conversation,
     create_guest,
     create_session,
@@ -32,15 +33,12 @@ from db import (
     decrement_conversation_count,
     decrement_guest_conversation_count,
     end_conversation,
-    get_conversation_usage,
     get_guest_conversation_count,
     get_session_user,
-    increment_conversation_count,
-    increment_guest_conversation_count,
-    init_auth_db,
+    init_db,
+    try_charge_conversation,
+    try_charge_guest_conversation,
 )
-from config.constants import *
-from config.logging_config import setup_logging
 from utils import *
 
 # How long a pre-connected ("warm") peer connection may sit without the client
@@ -102,8 +100,7 @@ class WebPage:
         self.pcs = set()
         self.args = self.generate_args()
         patch_ice_gather_timeout()
-        init_auth_db()
-        backup_to_supabase()
+        init_db()
         self.logger.info("Logging is set up.")
 
     def _set_session_cookie(self, response: web.StreamResponse, request: web.Request, token: str):
@@ -440,20 +437,18 @@ class WebPage:
         try:
             # Quota is checked and charged here, not at negotiation time, so page
             # views (and failed handshakes) never cost a conversation slot.
+            # Each charge is one conditional UPDATE, so concurrent activations on the
+            # same account can't both squeeze past the limit.
             if user is not None:
-                conversation_count, conversation_limit = get_conversation_usage(user["id"])
-                if conversation_count >= conversation_limit:
+                if not try_charge_conversation(user["id"]):
                     reply(False, "Conversation limit reached")
                     return
-                increment_conversation_count(user["id"])
                 charged = True
                 conversation_id = create_conversation(user["id"])
             else:
-                guest_count = get_guest_conversation_count(guest_token)
-                if guest_count is None or guest_count >= GUEST_CONVERSATION_LIMIT:
+                if not try_charge_guest_conversation(guest_token):
                     reply(False, "Guest trial used up — sign up for more conversations.")
                     return
-                increment_guest_conversation_count(guest_token)
                 charged = True
                 # Guest conversations aren't persisted (no account to attach them to).
 

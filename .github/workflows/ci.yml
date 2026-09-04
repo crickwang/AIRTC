@@ -37,8 +37,26 @@ jobs:
 
   # ── Python tests ─────────────────────────────────────────────────────────────
   python-test:
-    name: Auth store tests
+    name: Database tests
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: airtc
+          POSTGRES_PASSWORD: airtc_test
+          POSTGRES_DB: airtc_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U airtc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://airtc:airtc_test@localhost:5432/airtc_test
 
     steps:
     - uses: actions/checkout@v4
@@ -48,9 +66,9 @@ jobs:
         python-version: "3.12"
 
     - name: Install dependencies
-      run: pip install pytest pyyaml python-dotenv supabase
+      run: pip install pytest pyyaml python-dotenv "psycopg[binary]"
 
-    - name: Run auth store tests
+    - name: Run database tests
       run: pytest tests/test_db.py -v
 
   # ── Config validation ────────────────────────────────────────────────────────

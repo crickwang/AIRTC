@@ -1,22 +1,20 @@
-# AI-generated test suite (Claude) for db.py, written on the `testing` branch.
+# AI-generated test suite (Claude) for db.py, originally written on the `testing` branch
+# and ported to PostgreSQL on the `database` branch. The isolated_db fixture in
+# tests/conftest.py rebuilds the schema in TEST_DATABASE_URL before every test.
 
-import sqlite3
-
+import psycopg
 import pytest
 
 import db
 
 
-@pytest.fixture(autouse=True)
-def isolated_db(tmp_path, monkeypatch):
-    """Point db at a throwaway sqlite file so tests never touch a real auth.db."""
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test_auth.db")
-    monkeypatch.setattr(db, "APP_ENV", "development")
-    db.init_auth_db()
-
-
 def make_user(username="alice", password="hunter2"):
     return db.create_user(username, password)
+
+
+def query_one(sql, params=()):
+    with db._connect() as conn:
+        return conn.execute(sql, params).fetchone()
 
 
 class TestUsers:
@@ -55,6 +53,12 @@ class TestUsers:
         with pytest.raises(ValueError):
             db.create_user("alice", "")
 
+    # create_user returns the new row directly (INSERT ... RETURNING), so the id it
+    # hands back must match what a lookup finds.
+    def test_create_user_returns_persisted_row(self):
+        user = make_user()
+        assert db.get_user_by_id(user["id"])["username"] == "alice"
+
 
 class TestSessions:
     # A session token just issued for a user should resolve back to that same user.
@@ -75,16 +79,13 @@ class TestSessions:
         token = db.create_session(user["id"])
         with db._connect() as conn:
             conn.execute(
-                "UPDATE sessions SET expires_at = datetime('now', '-1 second') WHERE token = ?",
+                "UPDATE sessions SET expires_at = now() - interval '1 second' WHERE token = %s",
                 (token,),
             )
 
         assert db.get_session_user(token) is None
-        with db._connect() as conn:
-            remaining = conn.execute(
-                "SELECT COUNT(*) FROM sessions WHERE token = ?", (token,)
-            ).fetchone()[0]
-        assert remaining == 0
+        remaining = query_one("SELECT COUNT(*) AS n FROM sessions WHERE token = %s", (token,))
+        assert remaining["n"] == 0
 
 
 class TestConversationLimits:
@@ -116,6 +117,51 @@ class TestConversationLimits:
         with pytest.raises(ValueError):
             db.set_conversation_limit("nobody", 5)
 
+    # try_charge_conversation succeeds exactly `limit` times, then refuses without
+    # touching the count — the check and the increment are one statement.
+    def test_try_charge_conversation_stops_at_limit(self):
+        user = make_user()
+        db.set_conversation_limit("alice", 2)
+        assert db.try_charge_conversation(user["id"]) is True
+        assert db.try_charge_conversation(user["id"]) is True
+        assert db.try_charge_conversation(user["id"]) is False
+        count, _ = db.get_conversation_usage(user["id"])
+        assert count == 2
+
+    # A refund after a failed activation should re-open a slot.
+    def test_decrement_reopens_slot(self):
+        user = make_user()
+        db.set_conversation_limit("alice", 1)
+        assert db.try_charge_conversation(user["id"]) is True
+        db.decrement_conversation_count(user["id"])
+        assert db.try_charge_conversation(user["id"]) is True
+
+
+class TestGuests:
+    # A token that was never issued has no usage row, which the caller treats as "unknown".
+    def test_unknown_guest_returns_none(self):
+        assert db.get_guest_conversation_count("nope") is None
+
+    # A fresh guest starts at zero and can be charged GUEST_CONVERSATION_LIMIT times.
+    def test_try_charge_guest_stops_at_limit(self):
+        token = db.create_guest()
+        assert db.get_guest_conversation_count(token) == 0
+        for _ in range(db.GUEST_CONVERSATION_LIMIT):
+            assert db.try_charge_guest_conversation(token) is True
+        assert db.try_charge_guest_conversation(token) is False
+        assert db.get_guest_conversation_count(token) == db.GUEST_CONVERSATION_LIMIT
+
+    # Charging an unknown token must fail rather than creating a row.
+    def test_try_charge_unknown_guest_fails(self):
+        assert db.try_charge_guest_conversation("nope") is False
+        assert db.get_guest_conversation_count("nope") is None
+
+    # Refunding below zero is clamped by the WHERE guard, and the CHECK backs it up.
+    def test_decrement_guest_never_goes_negative(self):
+        token = db.create_guest()
+        db.decrement_guest_conversation_count(token)
+        assert db.get_guest_conversation_count(token) == 0
+
 
 class TestConversationsAndMessages:
     # Starting a conversation should return an int id and write a row with started_at set,
@@ -125,11 +171,10 @@ class TestConversationsAndMessages:
         conversation_id = db.create_conversation(user["id"])
         assert isinstance(conversation_id, int)
 
-        with db._connect() as conn:
-            row = conn.execute(
-                "SELECT user_id, started_at, ended_at FROM conversations WHERE id = ?",
-                (conversation_id,),
-            ).fetchone()
+        row = query_one(
+            "SELECT user_id, started_at, ended_at FROM conversations WHERE id = %s",
+            (conversation_id,),
+        )
         assert row["user_id"] == user["id"]
         assert row["started_at"] is not None
         assert row["ended_at"] is None
@@ -144,10 +189,10 @@ class TestConversationsAndMessages:
 
         with db._connect() as conn:
             rows = conn.execute(
-                "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id",
+                "SELECT role, content FROM messages WHERE conversation_id = %s ORDER BY id",
                 (conversation_id,),
             ).fetchall()
-        assert [dict(r) for r in rows] == [
+        assert rows == [
             {"role": "user", "content": "hello there"},
             {"role": "assistant", "content": "hi, how can I help?"},
         ]
@@ -158,18 +203,27 @@ class TestConversationsAndMessages:
         conversation_id = db.create_conversation(user["id"])
         db.add_message(conversation_id, "user", "")
 
-        with db._connect() as conn:
-            count = conn.execute(
-                "SELECT COUNT(*) FROM messages WHERE conversation_id = ?", (conversation_id,)
-            ).fetchone()[0]
-        assert count == 0
+        row = query_one(
+            "SELECT COUNT(*) AS n FROM messages WHERE conversation_id = %s", (conversation_id,)
+        )
+        assert row["n"] == 0
 
-    # The messages.role CHECK constraint should reject anything other than user/assistant.
+    # messages.role is an enum, so anything other than user/assistant is rejected by Postgres.
     def test_add_message_rejects_invalid_role(self):
         user = make_user()
         conversation_id = db.create_conversation(user["id"])
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(psycopg.DataError):
             db.add_message(conversation_id, "system", "not allowed")
+
+    # Deleting a user should cascade through conversations to messages.
+    def test_deleting_user_cascades(self):
+        user = make_user()
+        conversation_id = db.create_conversation(user["id"])
+        db.add_message(conversation_id, "user", "hello")
+        with db._connect() as conn:
+            conn.execute("DELETE FROM users WHERE id = %s", (user["id"],))
+        assert query_one("SELECT COUNT(*) AS n FROM conversations")["n"] == 0
+        assert query_one("SELECT COUNT(*) AS n FROM messages")["n"] == 0
 
     # Ending a conversation should stamp ended_at instead of leaving it NULL.
     def test_end_conversation_sets_ended_at(self):
@@ -177,11 +231,8 @@ class TestConversationsAndMessages:
         conversation_id = db.create_conversation(user["id"])
         db.end_conversation(conversation_id)
 
-        with db._connect() as conn:
-            ended_at = conn.execute(
-                "SELECT ended_at FROM conversations WHERE id = ?", (conversation_id,)
-            ).fetchone()[0]
-        assert ended_at is not None
+        row = query_one("SELECT ended_at FROM conversations WHERE id = %s", (conversation_id,))
+        assert row["ended_at"] is not None
 
     # end_conversation's WHERE ... AND ended_at IS NULL guard means calling it twice should
     # keep the original end time, not bump it forward on a second call.
@@ -189,15 +240,8 @@ class TestConversationsAndMessages:
         user = make_user()
         conversation_id = db.create_conversation(user["id"])
         db.end_conversation(conversation_id)
-
-        with db._connect() as conn:
-            first_ended_at = conn.execute(
-                "SELECT ended_at FROM conversations WHERE id = ?", (conversation_id,)
-            ).fetchone()[0]
+        first = query_one("SELECT ended_at FROM conversations WHERE id = %s", (conversation_id,))
 
         db.end_conversation(conversation_id)
-        with db._connect() as conn:
-            second_ended_at = conn.execute(
-                "SELECT ended_at FROM conversations WHERE id = ?", (conversation_id,)
-            ).fetchone()[0]
-        assert second_ended_at == first_ended_at
+        second = query_one("SELECT ended_at FROM conversations WHERE id = %s", (conversation_id,))
+        assert second["ended_at"] == first["ended_at"]

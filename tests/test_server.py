@@ -5,7 +5,7 @@
 # and WebPage._drain_track directly, with a fake peer-connection object and a fake
 # create_client() so no real aiortc negotiation, network I/O, or ASR/LLM/TTS client
 # construction happens. The quota/guest logic runs against a real (tmp) sqlite DB via
-# db, mirroring tests/test_db.py's isolation fixture.
+# db; the isolated_db fixture in tests/conftest.py gives each test a clean schema.
 
 import asyncio
 import json
@@ -18,14 +18,6 @@ import db
 import server
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(autouse=True)
-def isolated_db(tmp_path, monkeypatch):
-    """Point db at a throwaway sqlite file so tests never touch a real auth.db."""
-    monkeypatch.setattr(db, "DB_PATH", tmp_path / "test_auth.db")
-    monkeypatch.setattr(db, "APP_ENV", "development")
-    db.init_auth_db()
 
 
 @pytest.fixture(autouse=True)
