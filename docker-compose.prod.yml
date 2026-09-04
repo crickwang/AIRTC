@@ -1,20 +1,37 @@
 # Production overlay for the VM, applied on top of docker-compose.yml:
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build app
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
-# The image is built on the VM from the checked-out source (base file's `build: .`).
-# Postgres is Supabase, so there is no db service; DATABASE_URL comes from the VM's .env.
+# Postgres runs as a container on the VM for now (Supabase later; move the data with
+# scripts/migrate_sqlite_to_postgres.py's cousin, pg_dump | psql). Its port is bound to
+# loopback only, so nothing outside the VM can reach it.
 #
-# network_mode: host is deliberate. aiortc picks UDP media ports at call time from a
-# wide range; bridged networking only forwards ports listed under `ports`, so the HTTP
-# handshake would succeed and audio would silently never arrive.
+# The app uses network_mode: host on purpose: aiortc picks UDP media ports at call time
+# from a wide range, and bridged networking only forwards ports listed under `ports`, so
+# the HTTP handshake would succeed and audio would silently never arrive. A host-network
+# container is not on the compose network, which is why it reaches the db via
+# 127.0.0.1:5432 rather than the service name.
+#
+# The VM's .env must define:
+#   POSTGRES_PASSWORD=<long random string>
+#   DATABASE_URL=postgresql://airtc:<same string>@127.0.0.1:5432/airtc
 
 services:
+  db:
+    environment:
+      POSTGRES_USER: airtc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: airtc
+    ports: !reset
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airtc -d airtc"]
+    restart: unless-stopped
+
   app:
     image: airtc:prod
     network_mode: host
     ports: !reset []
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
     volumes: !reset
       - ./logs:/app/logs
-    depends_on: !reset []
