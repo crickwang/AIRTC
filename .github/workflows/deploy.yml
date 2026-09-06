@@ -1,12 +1,23 @@
 name: Deploy to Server
 
-# Manual only. This used to fire on every push to main and run git pull + pm2 restart
-# on the VM with no review gate; on 2026-09-04 that deployed the Postgres migration to
-# a VM with no DATABASE_URL and took the site down. Run it from the Actions tab once
-# the VM's .env is ready. Re-enable `push: branches: [main]` here when the docker
-# deploy has proven itself.
+# Continuous deployment: every push to main (i.e. every merged PR) rebuilds the Docker
+# image on the VM and restarts the container. deploy.sh refuses to leave a broken
+# container running: it waits for the healthcheck and rolls back to the previous image
+# if the new one never becomes healthy, so a bad merge shows up as a red run here
+# instead of a down site. Can still be run by hand from the Actions tab.
+#
+# History: this fired on push before 2026-09-04 too, but ran git pull + pm2 restart with
+# no health gate and no rollback, which is how the Postgres migration took the site down
+# on a VM whose .env had no DATABASE_URL.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
+
+# Never run two deploys at once; a second push while one is in flight waits its turn.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -19,6 +30,13 @@ jobs:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
+        command_timeout: 15m
         script: |
           cd /home/ubuntu/AIRTC
           ./deploy.sh
+
+    - name: Smoke-test the public site
+      run: |
+        code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://airtc.online/generate.html)
+        echo "GET /generate.html -> HTTP $code"
+        test "$code" = "200"
