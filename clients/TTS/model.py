@@ -232,6 +232,11 @@ class AzureTTS(TTSClient):
 
         # Thread-safe containers
         audio_chunk_queue = queue.Queue()
+        # Samples left over after the last whole frame of the previous SDK chunk. Azure's
+        # chunk sizes are not multiples of samples_per_frame, so padding each chunk's tail
+        # would insert a few ms of silence into the speech every chunk; the tail is carried
+        # into the next chunk instead and padded only once, at the end of the sentence.
+        pending = np.zeros(0, dtype=np.int16)
         error_container = [None]
         synthesis_complete = threading.Event()
 
@@ -324,12 +329,18 @@ class AzureTTS(TTSClient):
                             # Apply audio improvements
                             #audio_np = apply_audio_improvements(audio_np)
 
-                            # Send immediately
-                            await self.send_audio(audio_np, output_queue, samples_per_frame)
+                            # Send immediately (whole frames only; keep the tail for later)
+                            pending = await self.send_audio(
+                                np.concatenate([pending, audio_np]), output_queue, samples_per_frame
+                            )
 
                 except queue.Empty:
                     # Continue waiting for more chunks
                     await asyncio.sleep(0.01)
+
+            # Flush the final partial frame, padded to a whole frame exactly once.
+            if len(pending) > 0:
+                await self.send_audio(pending, output_queue, samples_per_frame, flush=True)
 
             # Disconnect event handlers
             self.synthesizer.synthesizing.disconnect_all()
@@ -351,22 +362,29 @@ class AzureTTS(TTSClient):
         self: object,
         audio_np: np.ndarray,
         output_queue: asyncio.Queue,
-        samples_per_frame: int
-    ) -> None:
-        """Send audio chunks immediately without waiting for complete sentence."""
+        samples_per_frame: int,
+        flush: bool = False,
+    ) -> np.ndarray:
+        """Queue whole frames from audio_np and return the unsent tail.
+
+        With flush=True the tail is zero-padded to a whole frame and sent too (end of a
+        sentence), and an empty array is returned.
+        """
         if len(audio_np) == 0:
-            return
+            return audio_np
 
         chunk_size = samples_per_frame  # 10ms chunks
+        whole = (len(audio_np) // chunk_size) * chunk_size
 
-        for i in range(0, len(audio_np), chunk_size):
-            chunk = audio_np[i:min(i + chunk_size, len(audio_np))]
-
-            if len(chunk) < samples_per_frame:
-                chunk = np.pad(chunk, (0, samples_per_frame - len(chunk)), 'constant')
-
-            await output_queue.put(chunk)
+        for i in range(0, whole, chunk_size):
+            await output_queue.put(audio_np[i:i + chunk_size])
             await asyncio.sleep(0.001)
+
+        tail = audio_np[whole:]
+        if len(tail) > 0 and flush:
+            await output_queue.put(np.pad(tail, (0, samples_per_frame - len(tail)), 'constant'))
+            tail = audio_np[:0]
+        return tail
 
 @register.add_model("tts", "edge")
 class EdgeTTS(TTSClient):
