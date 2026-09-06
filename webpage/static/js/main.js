@@ -147,6 +147,14 @@ function dockMicButton(button) {
     // via inline top/left must also cancel the transform, or it'd apply a second time
     // on top of the already-transform-adjusted coordinates.
     const rect = button.getBoundingClientRect();
+
+    // .system-prompt-row centers itself with transform: translate(), and a transformed
+    // ancestor is the containing block for position:fixed descendants. Left inside it,
+    // the .docked viewport coordinates would resolve against that 640px box and slide
+    // the button off the right edge of the screen. Reparent to <body> first (after
+    // measuring, so rect is still the on-screen spot) so fixed means the viewport.
+    document.body.appendChild(button);
+
     button.style.position = 'fixed';
     button.style.top = rect.top + 'px';
     button.style.left = rect.left + 'px';
