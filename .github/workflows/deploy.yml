@@ -1,17 +1,18 @@
 name: Deploy to Server
 
+# Manual only. This used to fire on every push to main and run git pull + pm2 restart
+# on the VM with no review gate; on 2026-09-04 that deployed the Postgres migration to
+# a VM with no DATABASE_URL and took the site down. Run it from the Actions tab once
+# the VM's .env is ready. Re-enable `push: branches: [main]` here when the docker
+# deploy has proven itself.
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
     - name: Deploy to server via SSH
       uses: appleboy/ssh-action@v1.0.3
       with:
@@ -20,6 +21,4 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
           cd /home/ubuntu/AIRTC
-          git pull origin main
-          /home/ubuntu/airtc/bin/pip install -r requirements.txt --quiet
-          pm2 restart airtc || pm2 start /home/ubuntu/run_airtc.sh --name airtc --interpreter none
+          ./deploy.sh

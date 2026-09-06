@@ -1,20 +1,34 @@
 # Production overlay for the VM, applied on top of docker-compose.yml:
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build app
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 #
-# The image is built on the VM from the checked-out source (base file's `build: .`).
-# Postgres is Supabase, so there is no db service; DATABASE_URL comes from the VM's .env.
+# Postgres is Supabase, so the local `db` service is disabled here (depends_on reset)
+# and only the app container runs.
 #
-# network_mode: host is deliberate. aiortc picks UDP media ports at call time from a
-# wide range; bridged networking only forwards ports listed under `ports`, so the HTTP
-# handshake would succeed and audio would silently never arrive.
+# The app uses network_mode: host on purpose: aiortc picks UDP media ports at call time
+# from a wide range, and bridged networking only forwards ports listed under `ports`, so
+# the HTTP handshake would succeed and audio would silently never arrive.
+#
+# Google Speech authenticates with a service-account key. .dockerignore excludes key/,
+# so the file is bind-mounted read-only and GOOGLE_APPLICATION_CREDENTIALS is pointed at
+# the in-container path (overriding whatever host path .env carries for the PM2 app).
+#
+# The VM's .env must define:
+#   DATABASE_URL=postgresql://...supabase pooler...?sslmode=require
+#   plus the API keys env_file already supplies.
+# The VM must have key/airtc-prod.json (service account with the Cloud Speech Client role).
 
 services:
+  db:
+    profiles: ["disabled"]
+
   app:
     image: airtc:prod
     network_mode: host
     ports: !reset []
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
-    volumes: !reset
-      - ./logs:/app/logs
     depends_on: !reset []
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/key/airtc-prod.json
+    volumes: !override
+      - ./logs:/app/logs
+      - ./key:/app/key:ro
