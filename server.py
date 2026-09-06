@@ -88,6 +88,22 @@ class ResponseLoggingQueue(asyncio.Queue):
         await super().put(item)
 
 
+@web.middleware
+async def _static_no_cache(request, handler):
+    """
+    Make browsers and the Cloudflare edge revalidate /static/ assets on every load.
+
+    The origin sent no Cache-Control, so Cloudflare applied its default 4-hour browser
+    TTL to .js/.css files; after a deploy, users kept running the previous main.js until
+    they hard-refreshed. no-cache still allows conditional requests (ETag/Last-Modified ->
+    304), so the cost is one small round trip per asset, not a full re-download.
+    """
+    response = await handler(request)
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 class WebPage:
     """
     WebPage class to handle WebRTC connections and media streaming.
@@ -595,7 +611,7 @@ class WebPage:
         Args:
             ssl_context: The SSL context for HTTPS (if any).
         """
-        app = web.Application()
+        app = web.Application(middlewares=[_static_no_cache])
         app.on_shutdown.append(self.on_shutdown)
         print(os.path.join(ROOT, "webpage"))
         app.router.add_get("/", self.introduction)
