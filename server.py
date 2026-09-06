@@ -3,6 +3,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import traceback
 import uuid
 from datetime import datetime
@@ -88,6 +89,38 @@ class ResponseLoggingQueue(asyncio.Queue):
         await super().put(item)
 
 
+def _static_version(static_dir=None):
+    """
+    Short content hash of everything under webpage/static, computed once at startup.
+
+    Appended as ?v=<hash> to every /static/ URL in the served pages, so a deploy that
+    changes a script or stylesheet changes its URL. Browsers and the Cloudflare edge then
+    fetch it as a brand-new file instead of consulting whatever copy they cached before,
+    which is what left users running an old main.js after the 2026-09-06 deploys.
+    """
+    static_dir = static_dir or os.path.join(ROOT, "webpage", "static")
+    digest = hashlib.sha1()
+    for dirpath, _dirnames, filenames in sorted(os.walk(static_dir)):
+        for name in sorted(filenames):
+            path = os.path.join(dirpath, name)
+            digest.update(os.path.relpath(path, static_dir).replace(os.sep, "/").encode())
+            with open(path, "rb") as f:
+                digest.update(f.read())
+    return digest.hexdigest()[:10]
+
+
+_STATIC_URL_RE = re.compile(r'((?:src|href)=")(/static/[^"?#]+)(")')
+
+
+def version_static_urls(html, version=None):
+    """Rewrite src="/static/x" and href="/static/x" in a page to /static/x?v=<version>."""
+    version = version or STATIC_VERSION
+    return _STATIC_URL_RE.sub(lambda m: f'{m.group(1)}{m.group(2)}?v={version}{m.group(3)}', html)
+
+
+STATIC_VERSION = _static_version()
+
+
 @web.middleware
 async def _static_no_cache(request, handler):
     """
@@ -155,7 +188,7 @@ class WebPage:
             web.Response: The response containing the HTML content.
         """
         content = open(os.path.join(ROOT, "webpage/introduction.html"), encoding="utf-8").read()
-        return web.Response(content_type="text/html", text=content, charset='utf-8')
+        return web.Response(content_type="text/html", text=version_static_urls(content), charset='utf-8')
 
     async def login_page(self, request: web.Request) -> web.Response:
         """
@@ -166,7 +199,7 @@ class WebPage:
             web.Response: The response containing the HTML content.
         """
         content = open(os.path.join(ROOT, "webpage/index.html"), encoding="utf-8").read()
-        return web.Response(content_type="text/html", text=content, charset='utf-8')
+        return web.Response(content_type="text/html", text=version_static_urls(content), charset='utf-8')
 
     async def generate(self, request: web.Request) -> web.Response:
         """
@@ -178,7 +211,7 @@ class WebPage:
             web.Response: The response containing the HTML content.
         """
         content = open(os.path.join(ROOT, "webpage/generate.html"), encoding="utf-8").read()
-        return web.Response(content_type="text/html", text=content, charset='utf-8')
+        return web.Response(content_type="text/html", text=version_static_urls(content), charset='utf-8')
 
     async def javascript(self, request: web.Request) -> web.Response:
         """
